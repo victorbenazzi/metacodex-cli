@@ -1,0 +1,30 @@
+{
+  "name": "metacodex-cli",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Multi-provider coding agent CLI. Session router on the Pi SDK.",
+  "type": "module",
+  "packageManager": "pnpm@11.17.0",
+  "bin": {
+    "mcx": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc --noEmit && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.9"
+  }
+}
