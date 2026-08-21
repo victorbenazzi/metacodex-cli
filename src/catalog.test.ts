@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   CURATED_PROVIDERS,
+  curatedEnabledModelPatterns,
+  findCuratedProvider,
   isCuratedPiProvider,
 } from "./catalog.js";
 
@@ -23,3 +25,12 @@ describe("catalog", () => {
     expect(isCuratedPiProvider("anthropic")).toBe(true);
   });
 });
+
+describe("findCuratedProvider", () => {
+  it("matches id, pi id, and label", () => {
+    expect(findCuratedProvider("kimi")?.piId).toBe("kimi-coding");
+    expect(findCuratedProvider("OpenCode Zen")?.id).toBe("opencode-zen");
+    expect(curatedEnabledModelPatterns()).toContain("openai-codex/*");
+  });
+});
+

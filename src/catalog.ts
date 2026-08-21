@@ -68,6 +68,19 @@ export function findCuratedByPiId(piId: string): CuratedProvider | undefined {
   return CURATED_PROVIDERS.find((p) => p.piId === piId);
 }
 
+export function findCuratedProvider(query: string): CuratedProvider | undefined {
+  const q = query.trim().toLowerCase();
+  if (!q) return undefined;
+  return CURATED_PROVIDERS.find(
+    (p) => p.id === q || p.piId === q || p.label.toLowerCase() === q,
+  );
+}
+
+/** Patterns for Pi `enabledModels`. Hides the rest of the engine catalog. */
+export function curatedEnabledModelPatterns(): string[] {
+  return CURATED_PROVIDERS.map((p) => `${p.piId}/*`);
+}
+
 /** Default model picker order after first login. */
 export function curatedPiIdOrder(): string[] {
   return CURATED_PROVIDERS.map((p) => p.piId);

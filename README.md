@@ -16,7 +16,7 @@ Status: v1 is being built. Contract is in [DESIGN.md](./DESIGN.md).
 ```bash
 pnpm install
 pnpm test
-pnpm dev          # mcx in the current directory
+pnpm dev          # interactive TUI (Pi InteractiveMode, home ~/.mcx)
 ```
 
 Home is `~/.mcx` (override with `MCX_HOME`). It does not read or write `~/.metacodex`.
