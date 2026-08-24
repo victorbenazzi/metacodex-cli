@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { hideUncuratedCatalog } from "./catalog-runtime.js";
 import { ensureMcxHome } from "./home.js";
 import { installBundledSkill, installBundledThemes, seedMcxSettings } from "./bootstrap.js";
 import { isEngineUpdateArg, isHelpArg, isVersionArg, mcxHelp, mcxUpdateRejected } from "./help.js";
@@ -30,8 +31,11 @@ async function main(): Promise<void> {
   await installBundledSkill(agentDir);
   await installBundledThemes(agentDir);
 
-  const { DefaultResourceLoader, main: piMain } = await import("@earendil-works/pi-coding-agent");
+  const { DefaultResourceLoader, ModelRuntime, main: piMain } = await import(
+    "@earendil-works/pi-coding-agent"
+  );
   hushSkillStartupDump(DefaultResourceLoader);
+  hideUncuratedCatalog(ModelRuntime);
   const { createMcxExtension } = await import("./extensions/mcx.js");
   await piMain(argv, {
     extensionFactories: [createMcxExtension()],

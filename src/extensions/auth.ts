@@ -2,7 +2,7 @@ import { join } from "node:path";
 import {
   ModelRuntime,
   type ExtensionAPI,
-  type ExtensionCommandContext,
+  type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { seedMcxSettings } from "../bootstrap.js";
 import {
@@ -13,6 +13,7 @@ import {
   type CuratedProvider,
 } from "../catalog.js";
 import { deviceCodeWidgetLines, oauthWidgetLines, openUrl } from "../oauth-ui.js";
+import { authRedirectArgs, isEnterKey, wrapAuthAutocomplete } from "./auth-redirect.js";
 import { loadFallbackSettings, saveFallbackSettings } from "./fallback.js";
 
 const CANCEL = "Cancel";
@@ -59,7 +60,7 @@ function methodLabel(method: AuthMethod): string {
 
 async function pickMethod(
   provider: CuratedProvider,
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
 ): Promise<AuthMethod | undefined> {
   if (provider.methods.length === 1) return provider.methods[0];
   const labels = provider.methods.map(methodLabel);
@@ -111,7 +112,7 @@ export function parseLoginOption(
 
 export async function answerLoginPrompt(
   prompt: AuthLoginPrompt,
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
 ): Promise<string> {
   if (prompt.type === "select") {
     if (prompt.options.length === 0) {
@@ -143,7 +144,7 @@ async function loginWithMethod(
   runtime: ModelRuntime,
   provider: CuratedProvider,
   method: AuthMethod,
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
 ): Promise<void> {
   await runtime.login(provider.piId, method, {
     prompt: async (prompt) => answerLoginPrompt(prompt as AuthLoginPrompt, ctx),
@@ -166,7 +167,7 @@ async function loginWithMethod(
   });
 }
 
-async function runFallbackEditor(ctx: ExtensionCommandContext, agentDir: string): Promise<void> {
+async function runFallbackEditor(ctx: ExtensionContext, agentDir: string): Promise<void> {
   const current = await loadFallbackSettings(agentDir);
   let chain = [...current.chain];
 
@@ -201,7 +202,7 @@ async function runFallbackEditor(ctx: ExtensionCommandContext, agentDir: string)
 
 export async function runAuthCommand(
   args: string,
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   pi: ExtensionAPI,
 ): Promise<void> {
   const agentDir = process.env.PI_CODING_AGENT_DIR;
@@ -285,6 +286,31 @@ export async function runAuthCommand(
 }
 
 export function registerAuthCommand(pi: ExtensionAPI): void {
+  let stopRedirect: (() => void) | undefined;
+  let autocompleteInstalled = false;
+
+  pi.on("session_shutdown", () => {
+    stopRedirect?.();
+    stopRedirect = undefined;
+  });
+
+  pi.on("session_start", (_event, ctx) => {
+    stopRedirect?.();
+    if (ctx.mode !== "tui") return;
+    if (!autocompleteInstalled) {
+      autocompleteInstalled = true;
+      ctx.ui.addAutocompleteProvider(wrapAuthAutocomplete);
+    }
+    stopRedirect = ctx.ui.onTerminalInput((data) => {
+      if (!isEnterKey(data)) return;
+      const args = authRedirectArgs(ctx.ui.getEditorText());
+      if (args === undefined) return;
+      ctx.ui.setEditorText("");
+      void runAuthCommand(args, ctx, pi);
+      return { consume: true };
+    });
+  });
+
   pi.registerCommand("auth", {
     description: "Connect a curated provider, or edit the fallback chain",
     getArgumentCompletions: (prefix) => {

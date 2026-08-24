@@ -64,6 +64,11 @@ export function isCuratedPiProvider(piId: string): boolean {
   return PI_IDS.has(piId);
 }
 
+/** Drop models from providers that are not in the v1 /auth table. */
+export function curatedModelsOnly<T extends { provider: string }>(models: readonly T[]): T[] {
+  return models.filter((model) => isCuratedPiProvider(model.provider));
+}
+
 export function findCuratedByPiId(piId: string): CuratedProvider | undefined {
   return CURATED_PROVIDERS.find((p) => p.piId === piId);
 }

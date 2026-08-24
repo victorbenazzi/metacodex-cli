@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CURATED_PROVIDERS,
   curatedEnabledModelPatterns,
+  curatedModelsOnly,
   enabledModelPatternsForPiIds,
   findCuratedProvider,
   isCuratedPiProvider,
@@ -25,6 +26,17 @@ describe("catalog", () => {
     expect(isCuratedPiProvider("openrouter")).toBe(false);
     expect(isCuratedPiProvider("google")).toBe(false);
     expect(isCuratedPiProvider("anthropic")).toBe(true);
+  });
+});
+
+describe("curatedModelsOnly", () => {
+  it("is the visibility filter for /model and fallback", () => {
+    expect(
+      curatedModelsOnly([
+        { provider: "anthropic", id: "opus" },
+        { provider: "google", id: "gemini" },
+      ]),
+    ).toEqual([{ provider: "anthropic", id: "opus" }]);
   });
 });
 
