@@ -27,6 +27,22 @@ describe("stripForProvider", () => {
     ]);
   });
 
+  it("keeps tool calls and drops provider signatures", () => {
+    const messages: RouterMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "call it", textSignature: "sig" },
+          { type: "toolCall", id: "t1", name: "read", thoughtSignature: "gemini" },
+        ],
+      },
+    ];
+    expect(stripForProvider(messages)[0]?.content).toEqual([
+      { type: "text", text: "call it" },
+      { type: "toolCall", id: "t1", name: "read" },
+    ]);
+  });
+
   it("does not mutate the original transcript", () => {
     const messages: RouterMessage[] = [
       {

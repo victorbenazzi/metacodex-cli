@@ -31,6 +31,8 @@ Home is `~/.mcx` (override with `MCX_HOME`). It does not read or write `~/.metac
 
 The parent agent spawns children with the `spawn` tool. That is not a slash command.
 
+Parent skills are the union of `~/.mcx/skills`, `.agents/skills`, AGENTS.md, plus read-only `~/.claude/skills`, `~/.codex/skills`, and `<repo>/.claude/skills`. A child only gets skills named in the spawn allowlist.
+
 ## License
 
 MIT

@@ -34,6 +34,9 @@ function stripBlock(block: ContentBlock): ContentBlock | null {
   delete next.thinking;
   delete next.signature;
   delete next.reasoning;
+  delete next.thinkingSignature;
+  delete next.thoughtSignature;
+  delete next.textSignature;
   return next;
 }
 

@@ -2,6 +2,11 @@ import type { ExtensionAPI, InlineExtension } from "@earendil-works/pi-coding-ag
 import { CURATED_PROVIDERS } from "../catalog.js";
 import { sessionTitle } from "../osc.js";
 import { registerAuthCommand } from "./auth.js";
+import { registerFallback } from "./fallback.js";
+import { registerHandoff } from "./handoff.js";
+import { createOscBridge, registerOsc } from "./osc.js";
+import { registerSkillDiscovery } from "./skills.js";
+import { registerSpawn } from "./spawn.js";
 
 function syncAuthHint(ctx: {
   modelRegistry: { getProviderAuthStatus: (id: string) => { configured: boolean } };
@@ -21,7 +26,17 @@ export function createMcxExtension(): InlineExtension {
   return {
     name: "mcx",
     factory: (pi: ExtensionAPI) => {
+      const osc = createOscBridge();
       registerAuthCommand(pi);
+      registerFallback(pi, {
+        onAttention: (kind) => {
+          osc.attention(kind);
+        },
+      });
+      registerHandoff(pi);
+      registerSpawn(pi, { writeOsc: osc.write });
+      registerSkillDiscovery(pi);
+      registerOsc(pi, osc);
 
       pi.on("session_start", (_event, ctx) => {
         syncAuthHint(ctx);

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildHandoffPacket, isCrossProvider } from "./handoff.js";
+import {
+  buildHandoffPacket,
+  deriveHandoffFields,
+  formatHandoffOption,
+  isCrossProvider,
+  listHandoffTargets,
+  parseHandoffOption,
+  shouldCompactForHandoff,
+} from "./handoff.js";
 
 describe("handoff packet", () => {
   const base = {
@@ -33,5 +41,69 @@ describe("handoff packet", () => {
   it("treats same-provider model swaps as not a handoff ceremony", () => {
     expect(isCrossProvider("anthropic", "anthropic")).toBe(false);
     expect(isCrossProvider("anthropic", "openai-codex")).toBe(true);
+  });
+});
+
+describe("handoff selector rows", () => {
+  it("round-trips provider/id from the select label", () => {
+    const row = formatHandoffOption({
+      provider: "deepseek",
+      id: "deepseek-chat",
+      name: "DeepSeek Chat",
+    });
+    expect(parseHandoffOption(row)).toEqual({ provider: "deepseek", id: "deepseek-chat" });
+    expect(parseHandoffOption("not-a-model")).toBeUndefined();
+  });
+});
+
+describe("listHandoffTargets", () => {
+  it("keeps curated models and drops the current one", () => {
+    const models = [
+      { provider: "anthropic", id: "opus" },
+      { provider: "deepseek", id: "deepseek-chat" },
+      { provider: "openrouter", id: "hidden" },
+    ];
+    expect(listHandoffTargets(models, { provider: "anthropic", id: "opus" })).toEqual([
+      { provider: "deepseek", id: "deepseek-chat" },
+    ]);
+  });
+});
+
+describe("shouldCompactForHandoff", () => {
+  it("compacts only when the destination window is smaller", () => {
+    expect(shouldCompactForHandoff(200_000, 64_000)).toBe(true);
+    expect(shouldCompactForHandoff(64_000, 200_000)).toBe(false);
+    expect(shouldCompactForHandoff(200_000, 200_000)).toBe(false);
+  });
+});
+
+describe("deriveHandoffFields", () => {
+  it("uses the last user prompt and lists write/edit work", () => {
+    const fields = deriveHandoffFields([
+      { role: "user", content: "add the grant check" },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "editing" },
+          {
+            type: "toolCall",
+            name: "edit",
+            arguments: { path: "src-tauri/src/util/paths.rs" },
+          },
+        ],
+      },
+      { role: "user", content: "now cover the fallback hop" },
+    ]);
+    expect(fields.inProgress).toBe("now cover the fallback hop");
+    expect(fields.alreadyDone).toContain("edit src-tauri/src/util/paths.rs");
+    expect(fields.doNotRedo).toContain("src-tauri/src/util/paths.rs");
+  });
+
+  it("stays specified-empty when the transcript has no user turn yet", () => {
+    expect(deriveHandoffFields([])).toEqual({
+      inProgress: "(not specified)",
+      alreadyDone: "(not specified)",
+      doNotRedo: "(see already done)",
+    });
   });
 });

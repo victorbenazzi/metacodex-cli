@@ -27,7 +27,8 @@ Package manager is pnpm. Node `>=22.19.0`.
 | `src/cli.ts` | Entry. Boots Pi InteractiveMode with our `agentDir`. |
 | `src/home.ts` | `~/.mcx` / `MCX_HOME`. |
 | `src/catalog.ts` | Curated providers visible in `/auth`, `/model`, `/handoff`, fallback. |
-| `src/osc.ts` | OSC 0/2, 9, 99 for the metacodex app. |
+| `src/osc.ts` | OSC 0/2, 9, 99 sequences the metacodex app already parses. |
+| `src/skills/` | Read-only discovery of Claude/Codex skill dirs. Never writes there. |
 | `src/router/` | Fallback, handoff packet, subagent brief, provider-specific strip. This is the product. |
 | `skills/mcx/` | Bundled Agent Skill. Copied to `~/.mcx/skills` on first run. Never overwrite user edits. |
 
