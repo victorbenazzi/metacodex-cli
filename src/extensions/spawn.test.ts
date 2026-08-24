@@ -22,6 +22,7 @@ type ToolExecute = (
 function createHarness(runChild: (request: ChildRunRequest) => Promise<{ ok: boolean; report: string }>) {
   const tools: { name: string; execute: ToolExecute }[] = [];
   const shutdown: Array<() => void> = [];
+  const agentStart: Array<(event: unknown, ctx: ExtensionContext) => void> = [];
   const messages: { customType: string; content: string; display?: boolean }[] = [];
   const progress: string[] = [];
   const osc: string[] = [];
@@ -31,6 +32,7 @@ function createHarness(runChild: (request: ChildRunRequest) => Promise<{ ok: boo
     model: { provider: "anthropic", id: "opus" },
     scopedModels: [],
     thinkingLevel: undefined,
+    signal: undefined as AbortSignal | undefined,
     modelRegistry: {
       getAvailable: () => [{ provider: "anthropic", id: "opus" }],
       find: (provider: string, id: string) =>
@@ -39,8 +41,9 @@ function createHarness(runChild: (request: ChildRunRequest) => Promise<{ ok: boo
   };
 
   const pi = {
-    on(event: string, handler: () => void) {
-      if (event === "session_shutdown") shutdown.push(handler);
+    on(event: string, handler: (event: unknown, ctx: ExtensionContext) => void) {
+      if (event === "session_shutdown") shutdown.push(() => handler({}, ctx as unknown as ExtensionContext));
+      if (event === "agent_start") agentStart.push(handler);
     },
     registerTool(tool: { name: string; execute: ToolExecute }) {
       tools.push(tool);
@@ -67,6 +70,10 @@ function createHarness(runChild: (request: ChildRunRequest) => Promise<{ ok: boo
     progress,
     osc,
     shutdown,
+    emitAgentStart(signal?: AbortSignal) {
+      ctx.signal = signal;
+      for (const handler of agentStart) handler({}, ctx as unknown as ExtensionContext);
+    },
     async run(
       params: Parameters<ToolExecute>[1],
       signal?: AbortSignal,
@@ -151,6 +158,59 @@ describe("registerSpawn", () => {
         display: true,
       },
     ]);
+  });
+
+  it("reports a thrown background child instead of leaving an unhandled rejection", async () => {
+    const harness = createHarness(async () => {
+      throw new Error("runner exploded");
+    });
+
+    const started = await harness.run({
+      description: "bg boom",
+      prompt: "look around",
+      background: true,
+    });
+    expect(started.content[0]?.text).toBe("Spawned in background: bg boom");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(harness.messages).toEqual([
+      {
+        customType: SPAWN_REPORT_CUSTOM_TYPE,
+        content: "Subagent failed (bg boom): runner exploded",
+        display: true,
+      },
+    ]);
+    expect(harness.osc).toEqual([oscAttention("subagent failed", "bg boom")]);
+  });
+
+  it("aborts live children when the parent agent run is aborted", async () => {
+    const seen: AbortSignal[] = [];
+    let release: (() => void) | undefined;
+    const blocker = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const harness = createHarness(async (request) => {
+      seen.push(request.signal);
+      await blocker;
+      return { ok: request.signal.aborted ? false : true, report: request.signal.aborted ? "spawn aborted" : "done" };
+    });
+
+    const started = await harness.run({
+      description: "bg scan",
+      prompt: "look around",
+      background: true,
+    });
+    expect(started.content[0]?.text).toBe("Spawned in background: bg scan");
+    await Promise.resolve();
+
+    const parentAbort = new AbortController();
+    harness.emitAgentStart(parentAbort.signal);
+    parentAbort.abort();
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(seen[0]?.aborted).toBe(true);
+    expect(harness.messages[0]?.content).toContain("spawn aborted");
   });
 
   it("emits OSC 99 when a child fails", async () => {

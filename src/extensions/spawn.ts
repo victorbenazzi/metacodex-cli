@@ -201,6 +201,10 @@ export function registerSpawn(
     abortAll();
   });
 
+  pi.on("agent_start", (_event, ctx) => {
+    ctx.signal?.addEventListener("abort", abortAll, { once: true });
+  });
+
   pi.registerTool({
     name: SPAWN_TOOL_NAME,
     label: "Spawn",
@@ -260,6 +264,7 @@ export function registerSpawn(
 
       const onParentAbort = (): void => childAbort.abort();
       signal?.addEventListener("abort", onParentAbort, { once: true });
+      ctx.signal?.addEventListener("abort", onParentAbort, { once: true });
       const timeout = setTimeout(() => childAbort.abort(), CHILD_TIMEOUT_MS);
 
       const background = params.background === true;
@@ -285,16 +290,17 @@ export function registerSpawn(
         } finally {
           clearTimeout(timeout);
           signal?.removeEventListener("abort", onParentAbort);
+          ctx.signal?.removeEventListener("abort", onParentAbort);
           live.delete(childId);
         }
       };
 
       if (background) {
-        void finish().then((result) => {
-          const text = result.ok
-            ? `Subagent finished (${description}):\n${result.report}`
-            : `Subagent failed (${description}): ${result.report}`;
-          if (!result.ok) writeOsc(oscAttention("subagent failed", description));
+        const deliver = (ok: boolean, report: string): void => {
+          const text = ok
+            ? `Subagent finished (${description}):\n${report}`
+            : `Subagent failed (${description}): ${report}`;
+          if (!ok) writeOsc(oscAttention("subagent failed", description));
           pi.sendMessage(
             {
               customType: SPAWN_REPORT_CUSTOM_TYPE,
@@ -303,7 +309,15 @@ export function registerSpawn(
             },
             { triggerTurn: true, deliverAs: "followUp" },
           );
-        });
+        };
+        void finish()
+          .then((result) => {
+            deliver(result.ok, result.report);
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            deliver(false, message);
+          });
         return resultOf(details, `Spawned in background: ${description}`);
       }
 

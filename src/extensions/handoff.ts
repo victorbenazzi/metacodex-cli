@@ -4,6 +4,7 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { isCuratedPiProvider } from "../catalog.js";
+import { createSelectPacketGate, withoutSelectPacket, type SelectPacketGate } from "./select-packet.js";
 import {
   buildHandoffPacket,
   deriveHandoffFields,
@@ -134,8 +135,7 @@ async function runHandoffCommand(
   const packet = buildPacket(from, dest, sourceMessages(ctx), instruction);
   await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow);
 
-  gate.suppressSelectPacket = true;
-  try {
+  await withoutSelectPacket(gate, async () => {
     const ok = await pi.setModel(dest);
     if (!ok) {
       ctx.ui.notify(`No API key for ${dest.provider}/${dest.id}`, "error");
@@ -143,13 +143,14 @@ async function runHandoffCommand(
     }
     injectPacket(pi, packet, true);
     ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
-  } finally {
-    gate.suppressSelectPacket = false;
-  }
+  });
 }
 
-export function registerHandoff(pi: ExtensionAPI): void {
-  const gate = { suppressSelectPacket: false };
+export function registerHandoff(
+  pi: ExtensionAPI,
+  options: { selectPacketGate?: SelectPacketGate } = {},
+): void {
+  const gate = options.selectPacketGate ?? createSelectPacketGate();
   let lastTargets: SessionModel[] = [];
 
   const rememberTargets = (ctx: ExtensionContext): void => {

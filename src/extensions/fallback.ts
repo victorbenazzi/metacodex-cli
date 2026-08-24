@@ -13,6 +13,7 @@ import {
   type ProviderFailure,
 } from "../router/fallback.js";
 import type { AttentionKind } from "./osc.js";
+import { withoutSelectPacket, type SelectPacketGate } from "./select-packet.js";
 import { stripForProvider, type RouterMessage } from "../router/strip.js";
 
 type AssistantLike = {
@@ -149,7 +150,11 @@ function announceAttention(
 
 export function registerFallback(
   pi: ExtensionAPI,
-  options: { loadSettings?: LoadFallbackSettings; onAttention?: FallbackAttention } = {},
+  options: {
+    loadSettings?: LoadFallbackSettings;
+    onAttention?: FallbackAttention;
+    selectPacketGate?: SelectPacketGate;
+  } = {},
 ): void {
   const loadSettings = options.loadSettings ?? defaultLoadSettings;
   const state: FallbackState = {
@@ -254,7 +259,10 @@ export function registerFallback(
       }
 
       const model = ctx.modelRegistry.find(plan.to.provider, plan.to.modelId);
-      if (!model || !(await pi.setModel(model))) {
+      const switched =
+        model &&
+        (await withoutSelectPacket(options.selectPacketGate, () => pi.setModel(model)));
+      if (!model || !switched) {
         skip.add(plan.to.provider);
         continue;
       }

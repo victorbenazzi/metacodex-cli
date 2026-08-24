@@ -53,7 +53,8 @@ export type HopPlan =
 
 const TIMEOUT_RE = /\b(timeout|timed out|etimedout|deadline exceeded)\b/i;
 const OVERLOAD_RE = /\b(overloaded|overload|capacity|too many requests)\b/i;
-const OVERFLOW_RE = /\b(context (length|window)|too many tokens|maximum context)\b/i;
+const OVERFLOW_RE =
+  /prompt is too long|request_too_large|context[_ ]?(length|window)|too many tokens|maximum context|exceeded model token limit|reduce the length of the messages|maximum prompt length|input token count|token limit exceeded/i;
 
 export const DEFAULT_MAX_HOPS = 2;
 

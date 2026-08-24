@@ -6,6 +6,7 @@ import { registerFallback } from "./fallback.js";
 import { registerHandoff } from "./handoff.js";
 import { registerHeader } from "./header.js";
 import { createOscBridge, registerOsc } from "./osc.js";
+import { createSelectPacketGate } from "./select-packet.js";
 import { registerSkillDiscovery } from "./skills.js";
 import { registerSpawn } from "./spawn.js";
 
@@ -28,14 +29,16 @@ export function createMcxExtension(): InlineExtension {
     name: "mcx",
     factory: (pi: ExtensionAPI) => {
       const osc = createOscBridge();
+      const selectPacketGate = createSelectPacketGate();
       registerAuthCommand(pi);
       registerHeader(pi);
       registerFallback(pi, {
         onAttention: (kind) => {
           osc.attention(kind);
         },
+        selectPacketGate,
       });
-      registerHandoff(pi);
+      registerHandoff(pi, { selectPacketGate });
       registerSpawn(pi, { writeOsc: osc.write });
       registerSkillDiscovery(pi);
       registerOsc(pi, osc);

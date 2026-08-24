@@ -29,10 +29,34 @@ describe("classifyProviderFailure", () => {
   it("hops overflow only after compaction, even when the HTTP status is 400", () => {
     expect(
       classifyProviderFailure({
+        message: "prompt is too long: 213462 tokens > 200000 maximum",
+        compactedAlready: false,
+      }).hop,
+    ).toBe(false);
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long: 213462 tokens > 200000 maximum",
+        compactedAlready: true,
+      }).reason,
+    ).toBe("overflow_after_compact");
+    expect(
+      classifyProviderFailure({
+        message: "Your request exceeded model token limit: 256000 (requested: 310000)",
+        compactedAlready: true,
+      }).reason,
+    ).toBe("overflow_after_compact");
+    expect(
+      classifyProviderFailure({
         message: "maximum context length exceeded",
         compactedAlready: false,
       }).hop,
     ).toBe(false);
+    expect(
+      classifyProviderFailure({
+        message: disguiseOverflowForRetry("prompt is too long: 213462 tokens > 200000 maximum"),
+        compactedAlready: true,
+      }).reason,
+    ).toBe("overflow_after_compact");
     expect(
       classifyProviderFailure({
         httpStatus: 400,

@@ -3,7 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { HANDOFF_CUSTOM_TYPE } from "../router/handoff.js";
 import { loadFallbackSettings, registerFallback, saveFallbackSettings } from "./fallback.js";
+import { registerHandoff } from "./handoff.js";
+import { createSelectPacketGate } from "./select-packet.js";
 
 type Handler = (event: Record<string, unknown>, ctx: ExtensionContext) => unknown;
 
@@ -11,12 +14,14 @@ function model(provider: string, id: string, contextWindow: number) {
   return { provider, id, contextWindow };
 }
 
-function createHarness(chain: string[]) {
+function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
   const handlers = new Map<string, Handler[]>();
   const setModels: { provider: string; id: string }[] = [];
   const notices: string[] = [];
   const attention: string[] = [];
+  const packets: { customType: string }[] = [];
   const statuses = new Map<string, string | undefined>();
+  const selectPacketGate = createSelectPacketGate();
 
   const anthropic = model("anthropic", "opus", 200_000);
   const deepseek = model("deepseek", "deepseek-chat", 64_000);
@@ -25,11 +30,18 @@ function createHarness(chain: string[]) {
 
   const ctx = {
     model: anthropic,
+    scopedModels: [] as { model: ReturnType<typeof model> }[],
+    isIdle: () => true,
+    waitForIdle: async () => {},
     modelRegistry: {
       getAvailable: () => available,
       find: (provider: string, id: string) =>
         available.find((item) => item.provider === provider && item.id === id),
     },
+    sessionManager: {
+      buildContextEntries: () => [],
+    },
+    compact: () => {},
     ui: {
       notify: (message: string) => {
         notices.push(message);
@@ -39,28 +51,10 @@ function createHarness(chain: string[]) {
       },
       setWorkingMessage: () => {},
       setTitle: () => {},
+      select: async () => undefined,
+      input: async () => undefined,
     },
   };
-
-  const pi = {
-    on(event: string, handler: Handler) {
-      const list = handlers.get(event) ?? [];
-      list.push(handler);
-      handlers.set(event, list);
-    },
-    async setModel(next: { provider: string; id: string; contextWindow: number }) {
-      setModels.push(next);
-      ctx.model = next;
-      return true;
-    },
-  };
-
-  registerFallback(pi as unknown as ExtensionAPI, {
-    loadSettings: () => ({ chain, maxHops: 2 }),
-    onAttention: (kind) => {
-      attention.push(kind);
-    },
-  });
 
   async function emit(type: string, event: Record<string, unknown> = {}) {
     let result: unknown;
@@ -70,7 +64,37 @@ function createHarness(chain: string[]) {
     return result;
   }
 
-  return { emit, setModels, notices, statuses, attention };
+  const pi = {
+    on(event: string, handler: Handler) {
+      const list = handlers.get(event) ?? [];
+      list.push(handler);
+      handlers.set(event, list);
+    },
+    registerCommand() {},
+    sendMessage(message: { customType: string }) {
+      packets.push(message);
+    },
+    async setModel(next: { provider: string; id: string; contextWindow: number }) {
+      const previous = ctx.model;
+      setModels.push(next);
+      ctx.model = next;
+      await emit("model_select", { model: next, previousModel: previous, source: "set" });
+      return true;
+    },
+  };
+
+  registerFallback(pi as unknown as ExtensionAPI, {
+    loadSettings: () => ({ chain, maxHops: 2 }),
+    onAttention: (kind) => {
+      attention.push(kind);
+    },
+    selectPacketGate,
+  });
+  if (options?.withHandoff) {
+    registerHandoff(pi as unknown as ExtensionAPI, { selectPacketGate });
+  }
+
+  return { emit, setModels, notices, statuses, attention, packets };
 }
 
 function assistantError(message: string, provider = "anthropic") {
@@ -168,6 +192,18 @@ describe("registerFallback", () => {
       { provider: "kimi-coding", id: "kimi-k2", contextWindow: 256_000 },
     ]);
     expect(harness.notices[0]).toBe("retrying on kimi (overflow_after_compact anthropic)");
+  });
+
+  it("does not inject a handoff packet when fallback hops to another provider", async () => {
+    const harness = createHarness(["anthropic", "deepseek"], { withHandoff: true });
+    await harness.emit("session_start");
+    await harness.emit("after_provider_response", { status: 429 });
+    const error = assistantError("rate limited");
+    await harness.emit("agent_end", { messages: [error] });
+
+    expect(harness.setModels).toHaveLength(1);
+    expect(harness.packets.filter((packet) => packet.customType === HANDOFF_CUSTOM_TYPE)).toEqual([]);
+    expect(harness.notices).toEqual(["retrying on deepseek (rate_limit anthropic)"]);
   });
 });
 
