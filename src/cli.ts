@@ -2,7 +2,12 @@
 
 import { hideUncuratedCatalog } from "./catalog-runtime.js";
 import { ensureMcxHome } from "./home.js";
-import { installBundledSkill, installBundledThemes, seedMcxSettings } from "./bootstrap.js";
+import {
+  installBundledKeybindings,
+  installBundledSkill,
+  installBundledThemes,
+  seedMcxSettings,
+} from "./bootstrap.js";
 import { isEngineUpdateArg, isHelpArg, isVersionArg, mcxHelp, mcxUpdateRejected } from "./help.js";
 import { installResumeHintRewrite } from "./resume.js";
 import { hushSkillStartupDump } from "./skills/diagnostics.js";
@@ -30,6 +35,7 @@ async function main(): Promise<void> {
   await seedMcxSettings(agentDir);
   await installBundledSkill(agentDir);
   await installBundledThemes(agentDir);
+  await installBundledKeybindings(agentDir);
 
   const { DefaultResourceLoader, ModelRuntime, main: piMain } = await import(
     "@earendil-works/pi-coding-agent"

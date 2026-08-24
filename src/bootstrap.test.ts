@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_THEME_SETTING } from "./brand/mark.js";
 import {
   DEFAULT_QUIET_STARTUP,
+  installBundledKeybindings,
   installBundledSkill,
   installBundledThemes,
   packageRoot,
   seedMcxSettings,
 } from "./bootstrap.js";
+import { pasteKeybindingsConfig } from "./extensions/paste-keys.js";
 import { enabledModelPatternsForPiIds } from "./catalog.js";
 
 describe("seedMcxSettings", () => {
@@ -124,5 +126,20 @@ describe("installBundledThemes", () => {
     await writeFile(darkPath, "user edit\n");
     await installBundledThemes(home, packageRoot());
     expect(await readFile(darkPath, "utf8")).toBe("user edit\n");
+  });
+});
+
+describe("installBundledKeybindings", () => {
+  it("writes paste keys once and leaves user edits alone", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-keys-"));
+    const first = await installBundledKeybindings(home);
+    const second = await installBundledKeybindings(home);
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    const dest = join(home, "keybindings.json");
+    expect(JSON.parse(await readFile(dest, "utf8"))).toEqual(pasteKeybindingsConfig());
+    await writeFile(dest, "user edit\n");
+    await installBundledKeybindings(home);
+    expect(await readFile(dest, "utf8")).toBe("user edit\n");
   });
 });

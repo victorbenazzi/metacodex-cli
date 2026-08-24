@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_THEME_SETTING } from "./brand/mark.js";
 import { enabledModelPatternsForPiIds, storedCuratedPiIds } from "./catalog.js";
+import { pasteKeybindingsConfig } from "./extensions/paste-keys.js";
 import { mcxPaths } from "./home.js";
 
 export const DEFAULT_QUIET_STARTUP = true;
@@ -131,4 +132,16 @@ export async function installBundledThemes(
     installed.push(name);
   }
   return installed;
+}
+
+export async function installBundledKeybindings(agentDir: string): Promise<boolean> {
+  const dest = join(mcxPaths(agentDir).home, "keybindings.json");
+  try {
+    await readFile(dest);
+    return false;
+  } catch {
+    // missing: install
+  }
+  await writeFile(dest, `${JSON.stringify(pasteKeybindingsConfig(), null, 2)}\n`, "utf8");
+  return true;
 }
