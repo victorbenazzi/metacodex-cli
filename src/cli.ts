@@ -2,12 +2,17 @@
 
 import { ensureMcxHome } from "./home.js";
 import { installBundledSkill, seedMcxSettings } from "./bootstrap.js";
+import { isHelpArg, isVersionArg, mcxHelp } from "./help.js";
 import { MCX_VERSION, PI_AGENT_DIR_ENV } from "./version.js";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  if (argv.includes("--version") || argv.includes("-V")) {
+  if (isVersionArg(argv)) {
     process.stdout.write(`mcx ${MCX_VERSION}\n`);
+    return;
+  }
+  if (isHelpArg(argv)) {
+    process.stdout.write(mcxHelp());
     return;
   }
 

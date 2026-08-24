@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isCuratedPiProvider } from "../catalog.js";
 import { mcxPaths } from "../home.js";
@@ -38,11 +38,33 @@ function emptySettings(): FallbackSettings {
 }
 
 export async function loadFallbackSettings(agentDir: string): Promise<FallbackSettings> {
+  return parseFallbackSettings(await readSettingsObject(agentDir));
+}
+
+export async function saveFallbackSettings(
+  agentDir: string,
+  settings: FallbackSettings,
+): Promise<void> {
+  const existing = (await readSettingsObject(agentDir)) ?? {};
+  const next = {
+    ...existing,
+    fallback: {
+      chain: settings.chain,
+      maxHops: settings.maxHops,
+    },
+  };
+  await writeFile(mcxPaths(agentDir).settings, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+}
+
+async function readSettingsObject(agentDir: string): Promise<Record<string, unknown> | undefined> {
   try {
     const raw: unknown = JSON.parse(await readFile(mcxPaths(agentDir).settings, "utf8"));
-    return parseFallbackSettings(raw);
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      return raw as Record<string, unknown>;
+    }
+    return {};
   } catch {
-    return emptySettings();
+    return undefined;
   }
 }
 

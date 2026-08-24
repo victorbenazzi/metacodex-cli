@@ -1,9 +1,9 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { loadFallbackSettings, registerFallback } from "./fallback.js";
+import { loadFallbackSettings, registerFallback, saveFallbackSettings } from "./fallback.js";
 
 type Handler = (event: Record<string, unknown>, ctx: ExtensionContext) => unknown;
 
@@ -182,5 +182,17 @@ describe("loadFallbackSettings", () => {
       chain: ["anthropic", "deepseek"],
       maxHops: 1,
     });
+  });
+
+  it("merges fallback into existing settings without dropping enabledModels", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-fallback-save-"));
+    await writeFile(join(home, "settings.json"), JSON.stringify({ enabledModels: ["anthropic/*"] }));
+    await saveFallbackSettings(home, { chain: ["deepseek", "kimi-coding"], maxHops: 2 });
+    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
+      enabledModels: string[];
+      fallback: { chain: string[]; maxHops: number };
+    };
+    expect(raw.enabledModels).toEqual(["anthropic/*"]);
+    expect(raw.fallback).toEqual({ chain: ["deepseek", "kimi-coding"], maxHops: 2 });
   });
 });

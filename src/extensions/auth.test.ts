@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAuthOption, parseAuthOption } from "./auth.js";
+import { formatAuthOption, formatFallbackChain, isFallbackOption, parseAuthOption } from "./auth.js";
 
 describe("auth option rows", () => {
   const anthropic = {
@@ -20,5 +20,12 @@ describe("auth option rows", () => {
     const row = formatAuthOption(anthropic, { configured: true, source: "stored" });
     expect(row).toContain("connected");
     expect(parseAuthOption("not-a-provider  x")).toBeUndefined();
+  });
+
+  it("formats the fallback chain and recognizes the fallback row", () => {
+    expect(formatFallbackChain([])).toBe("(empty, same-model retry)");
+    expect(formatFallbackChain(["anthropic", "deepseek"])).toBe("anthropic, deepseek");
+    expect(isFallbackOption("fallback  Fallback chain")).toBe(true);
+    expect(isFallbackOption("anthropic  Anthropic")).toBe(false);
   });
 });

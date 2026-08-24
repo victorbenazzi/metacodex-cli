@@ -7,15 +7,21 @@ import {
 import { seedMcxSettings } from "../bootstrap.js";
 import {
   CURATED_PROVIDERS,
+  findCuratedByPiId,
   findCuratedProvider,
   type AuthMethod,
   type CuratedProvider,
 } from "../catalog.js";
+import { loadFallbackSettings, saveFallbackSettings } from "./fallback.js";
 
 const CANCEL = "Cancel";
 const LOGOUT = "Logout";
 const CONNECT = "Connect";
 const CHANGE = "Change method";
+const DONE = "Done";
+const CLEAR = "Clear";
+const REMOVE_LAST = "Remove last";
+export const FALLBACK_OPTION = "fallback  Fallback chain";
 
 function statusLabel(configured: boolean, source?: string): string {
   if (!configured) return "not connected";
@@ -35,6 +41,15 @@ export function formatAuthOption(
 export function parseAuthOption(option: string): string | undefined {
   const id = option.trim().split(/\s+/)[0];
   return id && findCuratedProvider(id) ? id : undefined;
+}
+
+export function isFallbackOption(option: string): boolean {
+  return option.trim().split(/\s+/)[0] === "fallback";
+}
+
+export function formatFallbackChain(chain: readonly string[]): string {
+  if (chain.length === 0) return "(empty, same-model retry)";
+  return chain.map((piId) => findCuratedByPiId(piId)?.id ?? piId).join(", ");
 }
 
 function methodLabel(method: AuthMethod): string {
@@ -92,6 +107,39 @@ async function loginWithMethod(
   });
 }
 
+async function runFallbackEditor(ctx: ExtensionCommandContext, agentDir: string): Promise<void> {
+  const current = await loadFallbackSettings(agentDir);
+  let chain = [...current.chain];
+
+  for (;;) {
+    const remaining = CURATED_PROVIDERS.filter((provider) => !chain.includes(provider.piId));
+    const options = [
+      ...remaining.map((provider) => `${provider.id}  ${provider.label}`),
+      ...(chain.length > 0 ? [REMOVE_LAST, CLEAR] : []),
+      DONE,
+      CANCEL,
+    ];
+    const picked = await ctx.ui.select(`Fallback: ${formatFallbackChain(chain)}`, options);
+    if (!picked || picked === CANCEL) return;
+    if (picked === DONE) {
+      await saveFallbackSettings(agentDir, { chain, maxHops: current.maxHops });
+      ctx.ui.notify(`Fallback chain: ${formatFallbackChain(chain)}`, "info");
+      return;
+    }
+    if (picked === CLEAR) {
+      chain = [];
+      continue;
+    }
+    if (picked === REMOVE_LAST) {
+      chain = chain.slice(0, -1);
+      continue;
+    }
+    const id = parseAuthOption(picked);
+    const provider = id ? findCuratedProvider(id) : undefined;
+    if (provider && !chain.includes(provider.piId)) chain.push(provider.piId);
+  }
+}
+
 export async function runAuthCommand(
   args: string,
   ctx: ExtensionCommandContext,
@@ -104,12 +152,25 @@ export async function runAuthCommand(
   }
   const rt = await runtimeFor(agentDir);
   const statusOf = (piId: string) => ctx.modelRegistry.getProviderAuthStatus(piId);
+  const trimmed = args.trim().toLowerCase();
+  if (trimmed === "fallback") {
+    await runFallbackEditor(ctx, agentDir);
+    return;
+  }
 
   let provider = findCuratedProvider(args);
   if (!provider) {
-    const options = CURATED_PROVIDERS.map((p) => formatAuthOption(p, statusOf(p.piId)));
-    const picked = await ctx.ui.select("Providers", [...options, CANCEL]);
+    const options = [
+      ...CURATED_PROVIDERS.map((p) => formatAuthOption(p, statusOf(p.piId))),
+      FALLBACK_OPTION,
+      CANCEL,
+    ];
+    const picked = await ctx.ui.select("Providers", options);
     if (!picked || picked === CANCEL) return;
+    if (isFallbackOption(picked)) {
+      await runFallbackEditor(ctx, agentDir);
+      return;
+    }
     const id = parseAuthOption(picked);
     provider = id ? findCuratedProvider(id) : undefined;
     if (!provider) return;
@@ -157,16 +218,24 @@ export async function runAuthCommand(
 
 export function registerAuthCommand(pi: ExtensionAPI): void {
   pi.registerCommand("auth", {
-    description: "Connect a curated provider (OAuth or API key)",
+    description: "Connect a curated provider, or edit the fallback chain",
     getArgumentCompletions: (prefix) => {
       const q = prefix.trim().toLowerCase();
-      return CURATED_PROVIDERS.filter(
+      const providers = CURATED_PROVIDERS.filter(
         (p) => !q || p.id.startsWith(q) || p.piId.startsWith(q) || p.label.toLowerCase().includes(q),
       ).map((p) => ({
         value: p.id,
         label: p.label,
         description: p.methods.join(", "),
       }));
+      if (!q || "fallback".startsWith(q)) {
+        providers.push({
+          value: "fallback",
+          label: "Fallback chain",
+          description: "ordered hop list",
+        });
+      }
+      return providers;
     },
     handler: async (args, ctx) => {
       await runAuthCommand(args, ctx, pi);

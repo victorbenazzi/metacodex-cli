@@ -17,9 +17,13 @@ Status: v1 is being built. Contract is in [DESIGN.md](./DESIGN.md).
 pnpm install
 pnpm test
 pnpm dev          # interactive TUI (Pi InteractiveMode, home ~/.mcx)
+pnpm build && pnpm link --global   # puts `mcx` on PATH
+mcx --version
 ```
 
 Home is `~/.mcx` (override with `MCX_HOME`). It does not read or write `~/.metacodex`.
+
+The metacodex desktop app launches `mcx` as a PTY tab once the binary is on PATH.
 
 ## Commands (v1)
 

@@ -25,6 +25,7 @@ Package manager is pnpm. Node `>=22.19.0`.
 | Path | Role |
 |---|---|
 | `src/cli.ts` | Entry. Boots Pi InteractiveMode with our `agentDir`. |
+| `src/help.ts` | `mcx --help` / `--version` intercept, before Pi. |
 | `src/home.ts` | `~/.mcx` / `MCX_HOME`. |
 | `src/catalog.ts` | Curated providers visible in `/auth`, `/model`, `/handoff`, fallback. |
 | `src/osc.ts` | OSC 0/2, 9, 99 sequences the metacodex app already parses. |
