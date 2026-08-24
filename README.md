@@ -2,6 +2,10 @@
 
 [Português](./README.pt-BR.md)
 
+<p align="center">
+  <img src="docs/images/tui.png" alt="mcx TUI with the metacodex mark and prompt" width="920" />
+</p>
+
 Coding agent CLI. One session, several wallets. Anthropic, OpenAI, Codex, OpenCode Zen, OpenCode Go, DeepSeek, and Kimi. The product is the session router: visible fallback, user-driven handoff, isolated subagents.
 
 It is not a fork of [Pi](https://github.com/earendil-works/pi-mono). The engine is the Pi SDK. Home is `~/.mcx`. It does not read or write `~/.metacodex` or `~/.pi`.

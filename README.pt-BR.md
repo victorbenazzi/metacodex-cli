@@ -2,6 +2,10 @@
 
 [English](./README.md)
 
+<p align="center">
+  <img src="docs/images/tui.png" alt="TUI do mcx com a marca metacodex e o prompt" width="920" />
+</p>
+
 CLI de coding agent. Uma sessão, várias carteiras. Anthropic, OpenAI, Codex, OpenCode Zen, OpenCode Go, DeepSeek e Kimi. O produto é o roteador de sessão: fallback visível, handoff que você dispara, subagents isolados.
 
 Não é um fork do [Pi](https://github.com/earendil-works/pi-mono). O motor é o SDK do Pi. A home é `~/.mcx`. Não lê nem grava `~/.metacodex` nem `~/.pi`.
