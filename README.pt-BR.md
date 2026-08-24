@@ -24,40 +24,51 @@ O app desktop [metacodex](https://github.com/victorbenazzi) continua o shell. De
 
 ## Requisitos
 
-- Node.js `>=22.19.0`
-- [pnpm](https://pnpm.io/)
-- Um terminal. macOS, Linux, Windows.
+- Node.js `>=22.19.0` (o instalador confere)
+- Um terminal. macOS ou Linux. Windows: Git Bash ou WSL.
+- O pnpm entra sozinho se o Node tiver corepack ou npm
 
 ## Instalar
 
-O `dist/` não vai no git. Clone, instale, builde, coloque o `mcx` no `PATH`.
-
 ```bash
-git clone https://github.com/victorbenazzi/metacodex-cli.git
-cd metacodex-cli
-pnpm install
-pnpm build
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 ```
 
-Coloque o binário no `PATH` (escolha um):
-
-```bash
-# Funciona quando ~/.local/bin está no PATH
-mkdir -p ~/.local/bin
-ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
-
-# Ou, se o bin global do pnpm estiver no PATH
-pnpm link --global
-```
-
-Confira:
+Isso baixa o repo, roda `pnpm install && pnpm build` e liga o `mcx` em `~/.local/bin/mcx`. Rode de novo para atualizar.
 
 ```bash
 mcx --version    # mcx 0.0.1
 mcx --help
 ```
 
-Depois de um `git pull`, rode `pnpm install && pnpm build` de novo. O symlink continua apontando para `dist/cli.js`.
+Se o shell disser `command not found`, coloque `~/.local/bin` no `PATH` e abra um terminal novo:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Desinstalar (mantém `~/.mcx`: auth, sessões, settings):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash -s -- --uninstall
+```
+
+Travar um ref com `MCX_REF` (branch, tag ou commit):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=main bash
+```
+
+### Instalar de um clone
+
+```bash
+git clone https://github.com/victorbenazzi/metacodex-cli.git
+cd metacodex-cli
+pnpm install
+pnpm build
+mkdir -p ~/.local/bin
+ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
+```
 
 A home padrão é `~/.mcx`. Override: `MCX_HOME`.
 

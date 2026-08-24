@@ -24,40 +24,51 @@ The [metacodex](https://github.com/victorbenazzi) desktop app stays the shell. L
 
 ## Requirements
 
-- Node.js `>=22.19.0`
-- [pnpm](https://pnpm.io/)
-- A terminal (any). macOS, Linux, Windows.
+- Node.js `>=22.19.0` (the installer checks this)
+- A terminal. macOS or Linux. Windows: Git Bash or WSL.
+- pnpm is installed for you if Node has corepack or npm
 
 ## Install
 
-`dist/` is not in git. Clone, install, build, then put `mcx` on your `PATH`.
-
 ```bash
-git clone https://github.com/victorbenazzi/metacodex-cli.git
-cd metacodex-cli
-pnpm install
-pnpm build
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 ```
 
-Put the binary on `PATH` (pick one):
-
-```bash
-# Works on this machine when ~/.local/bin is on PATH
-mkdir -p ~/.local/bin
-ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
-
-# Or, if your pnpm global bin is on PATH
-pnpm link --global
-```
-
-Check:
+That downloads this repo, runs `pnpm install && pnpm build`, and links `mcx` to `~/.local/bin/mcx`. Re-run the same command to update.
 
 ```bash
 mcx --version    # mcx 0.0.1
 mcx --help
 ```
 
-After `git pull`, run `pnpm install && pnpm build` again. The symlink still points at `dist/cli.js`.
+If the shell says `command not found`, add `~/.local/bin` to `PATH` and open a new terminal:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Uninstall (keeps `~/.mcx`: auth, sessions, settings):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash -s -- --uninstall
+```
+
+Pin a ref with `MCX_REF` (branch, tag, or commit):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=main bash
+```
+
+### Install from a clone
+
+```bash
+git clone https://github.com/victorbenazzi/metacodex-cli.git
+cd metacodex-cli
+pnpm install
+pnpm build
+mkdir -p ~/.local/bin
+ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
+```
 
 Override the home directory with `MCX_HOME`. Default is `~/.mcx`.
 
