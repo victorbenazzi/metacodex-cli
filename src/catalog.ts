@@ -81,6 +81,20 @@ export function curatedEnabledModelPatterns(): string[] {
   return CURATED_PROVIDERS.map((p) => `${p.piId}/*`);
 }
 
+/** `enabledModels` entries for the curated wallets that currently have a credential. */
+export function enabledModelPatternsForPiIds(piIds: readonly string[]): string[] {
+  const wanted = new Set(piIds.filter(isCuratedPiProvider));
+  return CURATED_PROVIDERS.filter((provider) => wanted.has(provider.piId)).map(
+    (provider) => `${provider.piId}/*`,
+  );
+}
+
+/** Curated provider ids present in an auth.json object. */
+export function storedCuratedPiIds(auth: unknown): string[] {
+  if (!auth || typeof auth !== "object" || Array.isArray(auth)) return [];
+  return Object.keys(auth).filter(isCuratedPiProvider);
+}
+
 /** Default model picker order after first login. */
 export function curatedPiIdOrder(): string[] {
   return CURATED_PROVIDERS.map((p) => p.piId);

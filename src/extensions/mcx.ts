@@ -4,6 +4,7 @@ import { sessionTitle } from "../osc.js";
 import { registerAuthCommand } from "./auth.js";
 import { registerFallback } from "./fallback.js";
 import { registerHandoff } from "./handoff.js";
+import { registerHeader } from "./header.js";
 import { createOscBridge, registerOsc } from "./osc.js";
 import { registerSkillDiscovery } from "./skills.js";
 import { registerSpawn } from "./spawn.js";
@@ -28,6 +29,7 @@ export function createMcxExtension(): InlineExtension {
     factory: (pi: ExtensionAPI) => {
       const osc = createOscBridge();
       registerAuthCommand(pi);
+      registerHeader(pi);
       registerFallback(pi, {
         onAttention: (kind) => {
           osc.attention(kind);

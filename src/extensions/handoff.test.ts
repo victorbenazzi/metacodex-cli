@@ -15,7 +15,12 @@ function createHarness(options?: { instruction?: string | undefined }) {
     string,
     { handler: (args: string, ctx: ExtensionCommandContext) => Promise<void> }
   >();
-  const packets: { customType: string; content: string; display: boolean }[] = [];
+  const packets: {
+    customType: string;
+    content: string;
+    display: boolean;
+    triggerTurn?: boolean;
+  }[] = [];
   const setModels: { provider: string; id: string }[] = [];
   const notices: string[] = [];
   let compactCalls = 0;
@@ -92,8 +97,13 @@ function createHarness(options?: { instruction?: string | undefined }) {
       await emit("model_select", { model: next, previousModel: previous, source: "set" });
       return true;
     },
-    sendMessage(message: { customType: string; content: string; display: boolean }) {
-      packets.push(message);
+    sendMessage(
+      message: { customType: string; content: string; display: boolean },
+      options?: { triggerTurn?: boolean },
+    ) {
+      packets.push(
+        options?.triggerTurn === undefined ? message : { ...message, triggerTurn: options.triggerTurn },
+      );
     },
   };
 
@@ -131,6 +141,7 @@ describe("registerHandoff", () => {
     expect(harness.packets[0]?.content).toContain("finish the tests only");
     expect(harness.compactCalls).toBe(1);
     expect(harness.notices.some((n) => n.startsWith("Handed off to deepseek/"))).toBe(true);
+    expect(harness.packets[0]?.triggerTurn).toBe(true);
   });
 
   it("injects a packet on /model across providers, without an instruction prompt", async () => {
@@ -144,6 +155,7 @@ describe("registerHandoff", () => {
     expect(harness.packets).toHaveLength(1);
     expect(harness.packets[0]?.content).toContain("This session is a handoff");
     expect(harness.packets[0]?.content).not.toContain("User instruction");
+    expect(harness.packets[0]?.triggerTurn).toBe(false);
   });
 
   it("does not inject on same-provider /model or session restore", async () => {

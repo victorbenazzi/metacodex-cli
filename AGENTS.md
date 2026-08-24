@@ -32,6 +32,7 @@ Package manager is pnpm. Node `>=22.19.0`.
 | `src/skills/` | Read-only discovery of Claude/Codex skill dirs. Never writes there. |
 | `src/router/` | Fallback, handoff packet, subagent brief, provider-specific strip. This is the product. |
 | `skills/mcx/` | Bundled Agent Skill. Copied to `~/.mcx/skills` on first run. Never overwrite user edits. |
+| `themes/` | Bundled Pi TUI themes. Copied to `~/.mcx/themes` on first run. Never overwrite user edits. |
 
 ## Rules
 

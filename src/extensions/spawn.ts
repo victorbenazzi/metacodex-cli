@@ -11,7 +11,7 @@ import { isCuratedPiProvider } from "../catalog.js";
 import { loadFallbackSettings } from "./fallback.js";
 import { mcxPaths } from "../home.js";
 import { oscAttention } from "../osc.js";
-import { extraSkillDirs } from "../skills/discovery.js";
+import { extraSkillPaths } from "../skills/discovery.js";
 import type { OscWrite } from "./osc.js";
 import {
   CHILD_TIMEOUT_MS,
@@ -112,7 +112,7 @@ export async function runChildSession(
   }
 
   const skills = [...request.skills];
-  const extraSkills = extraSkillDirs(request.cwd);
+  const extraSkills = extraSkillPaths(request.cwd);
   const loader = new DefaultResourceLoader({
     cwd: request.cwd,
     agentDir,

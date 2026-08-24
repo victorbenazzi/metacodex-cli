@@ -2,39 +2,92 @@ import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { installBundledSkill, packageRoot, seedMcxSettings } from "./bootstrap.js";
-import { curatedEnabledModelPatterns } from "./catalog.js";
+import { DEFAULT_THEME_SETTING } from "./brand/mark.js";
+import {
+  DEFAULT_QUIET_STARTUP,
+  installBundledSkill,
+  installBundledThemes,
+  packageRoot,
+  seedMcxSettings,
+} from "./bootstrap.js";
+import { enabledModelPatternsForPiIds } from "./catalog.js";
 
 describe("seedMcxSettings", () => {
-  it("does not write enabledModels before any stored credential exists", async () => {
+  it("seeds the metacodex theme before any stored credential exists", async () => {
     const home = await mkdtemp(join(tmpdir(), "mcx-seed-"));
-    await seedMcxSettings(home);
-    await expect(readFile(join(home, "settings.json"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-  });
-
-  it("writes curated enabledModels once a credential is stored", async () => {
-    const home = await mkdtemp(join(tmpdir(), "mcx-seed-"));
-    await writeFile(join(home, "auth.json"), JSON.stringify({ anthropic: { type: "api_key", key: "x" } }));
     await seedMcxSettings(home);
     const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
-      enabledModels: string[];
+      theme?: string;
+      enabledModels?: string[];
+      quietStartup?: boolean;
     };
-    expect(raw.enabledModels).toEqual(curatedEnabledModelPatterns());
+    expect(raw.theme).toBe(DEFAULT_THEME_SETTING);
+    expect(raw.quietStartup).toBe(DEFAULT_QUIET_STARTUP);
+    expect((raw as { warnings?: { anthropicExtraUsage?: boolean } }).warnings?.anthropicExtraUsage).toBe(false);
+    expect(raw.enabledModels).toBeUndefined();
   });
 
-  it("does not overwrite an existing enabledModels list", async () => {
+  it("scopes enabledModels to stored curated wallets, not the whole table", async () => {
     const home = await mkdtemp(join(tmpdir(), "mcx-seed-"));
     await writeFile(
-      join(home, "settings.json"),
-      JSON.stringify({ enabledModels: ["anthropic/*"] }),
+      join(home, "auth.json"),
+      JSON.stringify({
+        anthropic: { type: "api_key", key: "x" },
+        deepseek: { type: "api_key", key: "y" },
+        openrouter: { type: "api_key", key: "z" },
+      }),
     );
     await seedMcxSettings(home);
     const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
       enabledModels: string[];
+      theme: string;
+    };
+    expect(raw.enabledModels).toEqual(enabledModelPatternsForPiIds(["anthropic", "deepseek"]));
+    expect(raw.theme).toBe(DEFAULT_THEME_SETTING);
+  });
+
+  it("rewrites a leftover full enabledModels list to the wallets that exist", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-seed-"));
+    await writeFile(join(home, "auth.json"), JSON.stringify({ anthropic: { type: "api_key", key: "x" } }));
+    await writeFile(
+      join(home, "settings.json"),
+      JSON.stringify({
+        theme: "dark",
+        enabledModels: ["anthropic/*", "openai/*", "openai-codex/*", "opencode/*", "kimi-coding/*"],
+      }),
+    );
+    await seedMcxSettings(home);
+    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
+      enabledModels: string[];
+      theme: string;
     };
     expect(raw.enabledModels).toEqual(["anthropic/*"]);
+    expect(raw.theme).toBe("dark");
+  });
+
+  it("drops enabledModels when no curated credential remains", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-seed-"));
+    await writeFile(
+      join(home, "settings.json"),
+      JSON.stringify({ theme: "dark", enabledModels: ["openai/*"] }),
+    );
+    await seedMcxSettings(home);
+    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
+      enabledModels?: string[];
+      theme: string;
+    };
+    expect(raw.enabledModels).toBeUndefined();
+    expect(raw.theme).toBe("dark");
+  });
+
+  it("does not turn quietStartup back on after the user disables it", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-seed-quiet-"));
+    await writeFile(join(home, "settings.json"), JSON.stringify({ quietStartup: false, theme: "dark" }));
+    await seedMcxSettings(home);
+    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
+      quietStartup: boolean;
+    };
+    expect(raw.quietStartup).toBe(false);
   });
 });
 
@@ -52,5 +105,24 @@ describe("installBundledSkill", () => {
     await writeFile(dest, "user edit\n");
     await installBundledSkill(home, packageRoot());
     expect(await readFile(dest, "utf8")).toBe("user edit\n");
+  });
+});
+
+describe("installBundledThemes", () => {
+  it("copies both themes once and leaves user edits alone", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-theme-"));
+    const first = await installBundledThemes(home, packageRoot());
+    const second = await installBundledThemes(home, packageRoot());
+    expect(first.sort()).toEqual(["metacodex-dark.json", "metacodex-light.json"]);
+    expect(second).toEqual([]);
+
+    const darkPath = join(home, "themes", "metacodex-dark.json");
+    const dark = JSON.parse(await readFile(darkPath, "utf8")) as { name: string; colors: { accent: string } };
+    expect(dark.name).toBe("metacodex-dark");
+    expect(dark.colors.accent).toBe("orange");
+
+    await writeFile(darkPath, "user edit\n");
+    await installBundledThemes(home, packageRoot());
+    expect(await readFile(darkPath, "utf8")).toBe("user edit\n");
   });
 });

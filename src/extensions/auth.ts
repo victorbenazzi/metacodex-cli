@@ -12,6 +12,7 @@ import {
   type AuthMethod,
   type CuratedProvider,
 } from "../catalog.js";
+import { deviceCodeWidgetLines, oauthWidgetLines, openUrl } from "../oauth-ui.js";
 import { loadFallbackSettings, saveFallbackSettings } from "./fallback.js";
 
 const CANCEL = "Cancel";
@@ -80,7 +81,63 @@ type AuthNotifyEvent = {
   url?: string;
   message?: string;
   instructions?: string;
+  userCode?: string;
+  verificationUri?: string;
 };
+
+type AuthLoginPrompt =
+  | {
+      type?: "text" | "secret" | "manual_code";
+      message: string;
+      placeholder?: string;
+    }
+  | {
+      type: "select";
+      message: string;
+      options: readonly { id: string; label: string; description?: string }[];
+    };
+
+export function formatLoginOption(option: { id: string; label: string; description?: string }): string {
+  return option.description ? `${option.id}  ${option.label}  ${option.description}` : `${option.id}  ${option.label}`;
+}
+
+export function parseLoginOption(
+  option: string,
+  choices: readonly { id: string }[],
+): string | undefined {
+  const id = option.trim().split(/\s+/)[0];
+  return id && choices.some((choice) => choice.id === id) ? id : undefined;
+}
+
+export async function answerLoginPrompt(
+  prompt: AuthLoginPrompt,
+  ctx: ExtensionCommandContext,
+): Promise<string> {
+  if (prompt.type === "select") {
+    if (prompt.options.length === 0) {
+      throw new Error("Login cancelled");
+    }
+    if (prompt.options.length === 1) {
+      const only = prompt.options[0];
+      if (!only) throw new Error("Login cancelled");
+      return only.id;
+    }
+    const picked = await ctx.ui.select(prompt.message, [
+      ...prompt.options.map(formatLoginOption),
+      CANCEL,
+    ]);
+    if (!picked || picked === CANCEL) throw new Error("Login cancelled");
+    const id = parseLoginOption(picked, prompt.options);
+    if (!id) throw new Error("Login cancelled");
+    return id;
+  }
+
+  const value = prompt.placeholder
+    ? await ctx.ui.input(prompt.message, prompt.placeholder)
+    : await ctx.ui.input(prompt.message);
+  if (value === undefined) throw new Error("Login cancelled");
+  return value;
+}
 
 async function loginWithMethod(
   runtime: ModelRuntime,
@@ -89,17 +146,19 @@ async function loginWithMethod(
   ctx: ExtensionCommandContext,
 ): Promise<void> {
   await runtime.login(provider.piId, method, {
-    prompt: async (prompt: { message: string; placeholder?: string }) => {
-      const value = prompt.placeholder
-        ? await ctx.ui.input(prompt.message, prompt.placeholder)
-        : await ctx.ui.input(prompt.message);
-      if (value === undefined) throw new Error("Login cancelled");
-      return value;
-    },
+    prompt: async (prompt) => answerLoginPrompt(prompt as AuthLoginPrompt, ctx),
     notify: (event: AuthNotifyEvent) => {
       if (event.type === "auth_url" && event.url) {
-        const extra = event.instructions ? `${event.instructions} ` : "";
-        ctx.ui.notify(`${extra}${event.url}`, "info");
+        openUrl(event.url);
+        ctx.ui.setWidget("mcx-oauth", oauthWidgetLines(event.url, event.instructions));
+        return;
+      }
+      if (event.type === "device_code" && event.verificationUri && event.userCode) {
+        openUrl(event.verificationUri);
+        ctx.ui.setWidget(
+          "mcx-oauth",
+          deviceCodeWidgetLines({ userCode: event.userCode, verificationUri: event.verificationUri }),
+        );
         return;
       }
       if (event.message) ctx.ui.notify(event.message, "info");
@@ -184,6 +243,7 @@ export async function runAuthCommand(
     if (action === LOGOUT) {
       try {
         await rt.logout(provider.piId);
+        await seedMcxSettings(agentDir);
         await ctx.modelRegistry.refresh();
         ctx.ui.notify(`Logged out of ${provider.label}`, "info");
       } catch (error) {
@@ -209,10 +269,18 @@ export async function runAuthCommand(
       method === "oauth" ? `Logged in to ${provider.label}` : `Saved API key for ${provider.label}`,
       "info",
     );
+    if (provider.id === "anthropic" && method === "oauth") {
+      ctx.ui.notify(
+        "Anthropic OAuth here uses extra usage, not the Claude Pro plan. If extra usage is empty, connect an API key in /auth.",
+        "warning",
+      );
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === "Login cancelled") return;
     ctx.ui.notify(`Auth failed: ${message}`, "error");
+  } finally {
+    ctx.ui.setWidget("mcx-oauth", undefined);
   }
 }
 

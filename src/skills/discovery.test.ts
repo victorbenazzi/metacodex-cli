@@ -2,10 +2,16 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { extraSkillDirs, projectSkillRoots } from "./discovery.js";
+import { extraSkillDirs, extraSkillPaths, projectSkillRoots } from "./discovery.js";
 
 async function tempDir(prefix: string): Promise<string> {
   return mkdtemp(join(tmpdir(), prefix));
+}
+
+async function writeSkill(dir: string, name: string, frontmatterName = name): Promise<void> {
+  const skillDir = join(dir, name);
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(join(skillDir, "SKILL.md"), `---\nname: ${frontmatterName}\ndescription: test\n---\n`);
 }
 
 describe("projectSkillRoots", () => {
@@ -41,5 +47,28 @@ describe("extraSkillDirs", () => {
     await mkdir(claudeRepo, { recursive: true });
 
     expect(extraSkillDirs(repo, home)).toEqual([claudeHome, codexHome, claudeRepo]);
+  });
+});
+
+describe("extraSkillPaths", () => {
+  it("skips Claude skills that already exist in ~/.agents/skills", async () => {
+    const home = await tempDir("mcx-skills-dedupe-home-");
+    const cwd = await tempDir("mcx-skills-dedupe-cwd-");
+    const agentDir = await tempDir("mcx-skills-dedupe-agent-");
+    await writeSkill(join(home, ".agents", "skills"), "geo");
+    await writeSkill(join(home, ".claude", "skills"), "geo");
+    await writeSkill(join(home, ".claude", "skills"), "only-claude");
+
+    expect(extraSkillPaths(cwd, home, agentDir)).toEqual([join(home, ".claude", "skills", "only-claude")]);
+  });
+
+  it("returns nothing when every extra name is already loaded", async () => {
+    const home = await tempDir("mcx-skills-alldup-home-");
+    const cwd = await tempDir("mcx-skills-alldup-cwd-");
+    const agentDir = await tempDir("mcx-skills-alldup-agent-");
+    await writeSkill(join(home, ".agents", "skills"), "geo");
+    await writeSkill(join(home, ".claude", "skills"), "geo");
+
+    expect(extraSkillPaths(cwd, home, agentDir)).toEqual([]);
   });
 });

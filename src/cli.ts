@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import { ensureMcxHome } from "./home.js";
-import { installBundledSkill, seedMcxSettings } from "./bootstrap.js";
-import { isHelpArg, isVersionArg, mcxHelp } from "./help.js";
-import { MCX_VERSION, PI_AGENT_DIR_ENV } from "./version.js";
+import { installBundledSkill, installBundledThemes, seedMcxSettings } from "./bootstrap.js";
+import { isEngineUpdateArg, isHelpArg, isVersionArg, mcxHelp, mcxUpdateRejected } from "./help.js";
+import { installResumeHintRewrite } from "./resume.js";
+import { hushSkillStartupDump } from "./skills/diagnostics.js";
+import { MCX_VERSION, PI_AGENT_DIR_ENV, pinEngineUpdates } from "./version.js";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -15,13 +17,21 @@ async function main(): Promise<void> {
     process.stdout.write(mcxHelp());
     return;
   }
+  if (isEngineUpdateArg(argv)) {
+    process.stdout.write(mcxUpdateRejected());
+    return;
+  }
 
   const agentDir = await ensureMcxHome();
   process.env[PI_AGENT_DIR_ENV] = agentDir;
+  pinEngineUpdates();
+  installResumeHintRewrite();
   await seedMcxSettings(agentDir);
   await installBundledSkill(agentDir);
+  await installBundledThemes(agentDir);
 
-  const { main: piMain } = await import("@earendil-works/pi-coding-agent");
+  const { DefaultResourceLoader, main: piMain } = await import("@earendil-works/pi-coding-agent");
+  hushSkillStartupDump(DefaultResourceLoader);
   const { createMcxExtension } = await import("./extensions/mcx.js");
   await piMain(argv, {
     extensionFactories: [createMcxExtension()],

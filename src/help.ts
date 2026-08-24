@@ -8,6 +8,18 @@ export function isVersionArg(argv: readonly string[]): boolean {
   return argv.includes("--version") || argv.includes("-V");
 }
 
+export function isEngineUpdateArg(argv: readonly string[]): boolean {
+  return argv[0] === "update";
+}
+
+export function mcxUpdateRejected(): string {
+  return [
+    "mcx pins the Pi engine. Do not run pi update from here.",
+    "When the engine moves, a new mcx version ships it.",
+    "",
+  ].join("\n");
+}
+
 export function mcxHelp(version = MCX_VERSION): string {
   return [
     `mcx ${version}`,
@@ -17,6 +29,7 @@ export function mcxHelp(version = MCX_VERSION): string {
     "Usage:",
     "  mcx                  Interactive session",
     "  mcx -p <prompt>      Print mode (one shot)",
+    "  mcx --session <id>   Resume a session from ~/.mcx",
     "  mcx --version",
     "  mcx --help",
     "",

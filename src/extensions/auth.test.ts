@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { formatAuthOption, formatFallbackChain, isFallbackOption, parseAuthOption } from "./auth.js";
+import {
+  answerLoginPrompt,
+  formatAuthOption,
+  formatFallbackChain,
+  formatLoginOption,
+  isFallbackOption,
+  parseAuthOption,
+  parseLoginOption,
+} from "./auth.js";
 
 describe("auth option rows", () => {
   const anthropic = {
@@ -27,5 +35,22 @@ describe("auth option rows", () => {
     expect(formatFallbackChain(["anthropic", "deepseek"])).toBe("anthropic, deepseek");
     expect(isFallbackOption("fallback  Fallback chain")).toBe(true);
     expect(isFallbackOption("anthropic  Anthropic")).toBe(false);
+  });
+});
+
+describe("login method options", () => {
+  it("round-trips Codex browser vs device-code labels", () => {
+    const browser = { id: "browser", label: "Browser OAuth" };
+    const device = { id: "device", label: "Device code", description: "headless" };
+    expect(parseLoginOption(formatLoginOption(browser), [browser, device])).toBe("browser");
+    expect(parseLoginOption(formatLoginOption(device), [browser, device])).toBe("device");
+  });
+
+  it("skips the picker when Codex exposes a single login method", async () => {
+    const id = await answerLoginPrompt(
+      { type: "select", message: "Select OpenAI Codex login method:", options: [{ id: "browser", label: "Browser" }] },
+      { ui: { select: async () => "should-not-run" } } as never,
+    );
+    expect(id).toBe("browser");
   });
 });

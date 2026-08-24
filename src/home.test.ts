@@ -31,5 +31,6 @@ describe("mcxPaths", () => {
     const paths = mcxPaths("/tmp/mcx-dev");
     expect(paths.auth).toBe("/tmp/mcx-dev/auth.json");
     expect(paths.subagents).toBe("/tmp/mcx-dev/sessions/subagents");
+    expect(paths.themes).toBe("/tmp/mcx-dev/themes");
   });
 });

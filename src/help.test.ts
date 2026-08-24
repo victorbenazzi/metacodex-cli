@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHelpArg, isVersionArg, mcxHelp } from "./help.js";
+import { isEngineUpdateArg, isHelpArg, isVersionArg, mcxHelp, mcxUpdateRejected } from "./help.js";
 
 describe("mcx help", () => {
   it("intercepts help and version flags before Pi", () => {
@@ -15,6 +15,16 @@ describe("mcx help", () => {
     expect(text.startsWith("mcx 0.0.1")).toBe(true);
     expect(text).toContain("/auth");
     expect(text).toContain("/handoff");
+    expect(text).toContain("mcx --session");
     expect(text).not.toMatch(/\bpi \[options\]/i);
   });
+
+  it("blocks pi update so people bump mcx instead", () => {
+    expect(isEngineUpdateArg(["update"])).toBe(true);
+    expect(isEngineUpdateArg(["update", "--self"])).toBe(true);
+    expect(isEngineUpdateArg(["-p", "hi"])).toBe(false);
+    expect(mcxUpdateRejected()).toContain("pins the Pi engine");
+    expect(mcxUpdateRejected()).not.toContain("pi update --self");
+  });
 });
+

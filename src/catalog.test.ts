@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   CURATED_PROVIDERS,
   curatedEnabledModelPatterns,
+  enabledModelPatternsForPiIds,
   findCuratedProvider,
   isCuratedPiProvider,
+  storedCuratedPiIds,
 } from "./catalog.js";
 
 describe("catalog", () => {
@@ -31,6 +33,16 @@ describe("findCuratedProvider", () => {
     expect(findCuratedProvider("kimi")?.piId).toBe("kimi-coding");
     expect(findCuratedProvider("OpenCode Zen")?.id).toBe("opencode-zen");
     expect(curatedEnabledModelPatterns()).toContain("openai-codex/*");
+  });
+});
+
+describe("enabledModelPatternsForPiIds", () => {
+  it("keeps catalog order and ignores unknown wallets", () => {
+    expect(enabledModelPatternsForPiIds(["deepseek", "openrouter", "anthropic"])).toEqual([
+      "anthropic/*",
+      "deepseek/*",
+    ]);
+    expect(storedCuratedPiIds({ anthropic: {}, openrouter: {} })).toEqual(["anthropic"]);
   });
 });
 

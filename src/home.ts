@@ -20,6 +20,7 @@ export function mcxPaths(home = resolveMcxHome()) {
     subagents: join(home, "sessions", "subagents"),
     skills: join(home, "skills"),
     extensions: join(home, "extensions"),
+    themes: join(home, "themes"),
   };
 }
 
@@ -30,5 +31,6 @@ export async function ensureMcxHome(home = resolveMcxHome()): Promise<string> {
   await mkdir(paths.subagents, { recursive: true });
   await mkdir(paths.skills, { recursive: true });
   await mkdir(paths.extensions, { recursive: true });
+  await mkdir(paths.themes, { recursive: true });
   return paths.home;
 }

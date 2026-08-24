@@ -54,14 +54,14 @@ function buildPacket(
   return buildHandoffPacket(input);
 }
 
-function injectPacket(pi: ExtensionAPI, packet: string): void {
+function injectPacket(pi: ExtensionAPI, packet: string, triggerTurn: boolean): void {
   pi.sendMessage(
     {
       customType: HANDOFF_CUSTOM_TYPE,
       content: packet,
       display: true,
     },
-    { triggerTurn: false },
+    triggerTurn ? { triggerTurn: true, deliverAs: "followUp" } : { triggerTurn: false },
   );
 }
 
@@ -141,7 +141,7 @@ async function runHandoffCommand(
       ctx.ui.notify(`No API key for ${dest.provider}/${dest.id}`, "error");
       return;
     }
-    injectPacket(pi, packet);
+    injectPacket(pi, packet, true);
     ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
   } finally {
     gate.suppressSelectPacket = false;
@@ -191,7 +191,7 @@ export function registerHandoff(pi: ExtensionAPI): void {
 
     const packet = buildPacket(event.previousModel, event.model, sourceMessages(ctx));
     await compactIfNeeded(ctx, event.previousModel.contextWindow, event.model.contextWindow);
-    injectPacket(pi, packet);
+    injectPacket(pi, packet, false);
     ctx.ui.notify(`Handed off to ${event.model.provider}/${event.model.id}`, "info");
   });
 }
