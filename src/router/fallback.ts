@@ -109,10 +109,6 @@ export function canHop(hopIndex: number, maxHops = DEFAULT_MAX_HOPS): boolean {
   return hopIndex < maxHops;
 }
 
-export function nextInChain<T>(chain: readonly T[], currentIndex: number): T | undefined {
-  return chain[currentIndex + 1];
-}
-
 export function formatHopNotice(input: {
   from: string;
   to: string;
@@ -155,6 +151,7 @@ export function parseFallbackSettings(raw: unknown): FallbackSettings {
 /**
  * Pi will not auto-retry overflow after one compact. Prefix a rate-limit
  * disguise so the existing retry loop continues after we switch models.
+ * This is a contract with the Pi retry loop, not a product rule.
  * The original text is kept for the session log.
  */
 export function disguiseOverflowForRetry(errorMessage: string): string {

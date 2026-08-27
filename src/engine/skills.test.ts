@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hushSkillStartupDump, visibleSkillDiagnostics } from "./diagnostics.js";
+import { hushSkillStartupDump, visibleSkillDiagnostics } from "./skills.js";
 
 describe("visibleSkillDiagnostics", () => {
   it("keeps load errors and drops description/collision nits", () => {

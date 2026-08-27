@@ -6,15 +6,16 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { seedMcxSettings } from "../bootstrap.js";
 import {
-  CURATED_PROVIDERS,
   findCuratedByPiId,
   findCuratedProvider,
+  providersForUi,
   type AuthMethod,
   type CuratedProvider,
 } from "../catalog.js";
+import { formatAuthRows, isPickerSeparator } from "../picker.js";
 import { deviceCodeWidgetLines, oauthWidgetLines, openUrl } from "../oauth-ui.js";
 import { authRedirectArgs, isEnterKey, wrapAuthAutocomplete } from "./auth-redirect.js";
-import { loadFallbackSettings, saveFallbackSettings } from "./fallback.js";
+import { loadFallbackSettings, saveFallbackSettings } from "../settings.js";
 
 const CANCEL = "Cancel";
 const LOGOUT = "Logout";
@@ -25,19 +26,11 @@ const CLEAR = "Clear";
 const REMOVE_LAST = "Remove last";
 export const FALLBACK_OPTION = "fallback  Fallback chain";
 
-function statusLabel(configured: boolean, source?: string): string {
-  if (!configured) return "not connected";
-  if (source === "stored") return "connected";
-  if (source === "environment") return "env";
-  return source ?? "connected";
-}
-
 export function formatAuthOption(
   provider: CuratedProvider,
   status: { configured: boolean; source?: string },
 ): string {
-  const methods = provider.methods.join(", ");
-  return `${provider.id}  ${provider.label}  [${methods}]  ${statusLabel(status.configured, status.source)}`;
+  return formatAuthRows([provider], () => status)[0] ?? "";
 }
 
 export function parseAuthOption(option: string): string | undefined {
@@ -172,7 +165,7 @@ async function runFallbackEditor(ctx: ExtensionContext, agentDir: string): Promi
   let chain = [...current.chain];
 
   for (;;) {
-    const remaining = CURATED_PROVIDERS.filter((provider) => !chain.includes(provider.piId));
+    const remaining = providersForUi().filter((provider) => !chain.includes(provider.piId));
     const options = [
       ...remaining.map((provider) => `${provider.id}  ${provider.label}`),
       ...(chain.length > 0 ? [REMOVE_LAST, CLEAR] : []),
@@ -204,10 +197,10 @@ export async function runAuthCommand(
   args: string,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
+  agentDir: string,
 ): Promise<void> {
-  const agentDir = process.env.PI_CODING_AGENT_DIR;
   if (!agentDir) {
-    ctx.ui.notify("mcx home is not set (PI_CODING_AGENT_DIR).", "error");
+    ctx.ui.notify("mcx home is not set.", "error");
     return;
   }
   const rt = await runtimeFor(agentDir);
@@ -221,19 +214,24 @@ export async function runAuthCommand(
   let provider = findCuratedProvider(args);
   if (!provider) {
     const options = [
-      ...CURATED_PROVIDERS.map((p) => formatAuthOption(p, statusOf(p.piId))),
+      ...formatAuthRows(providersForUi(), statusOf),
+      "──",
       FALLBACK_OPTION,
       CANCEL,
     ];
-    const picked = await ctx.ui.select("Providers", options);
-    if (!picked || picked === CANCEL) return;
-    if (isFallbackOption(picked)) {
-      await runFallbackEditor(ctx, agentDir);
-      return;
+    for (;;) {
+      const picked = await ctx.ui.select("Providers", options);
+      if (!picked || picked === CANCEL) return;
+      if (isPickerSeparator(picked)) continue;
+      if (isFallbackOption(picked)) {
+        await runFallbackEditor(ctx, agentDir);
+        return;
+      }
+      const id = parseAuthOption(picked);
+      provider = id ? findCuratedProvider(id) : undefined;
+      if (!provider) return;
+      break;
     }
-    const id = parseAuthOption(picked);
-    provider = id ? findCuratedProvider(id) : undefined;
-    if (!provider) return;
   }
 
   const status = statusOf(provider.piId);
@@ -285,7 +283,7 @@ export async function runAuthCommand(
   }
 }
 
-export function registerAuthCommand(pi: ExtensionAPI): void {
+export function registerAuthCommand(pi: ExtensionAPI, options: { agentDir: string }): void {
   let stopRedirect: (() => void) | undefined;
   let autocompleteInstalled = false;
 
@@ -306,7 +304,7 @@ export function registerAuthCommand(pi: ExtensionAPI): void {
       const args = authRedirectArgs(ctx.ui.getEditorText());
       if (args === undefined) return;
       ctx.ui.setEditorText("");
-      void runAuthCommand(args, ctx, pi);
+      void runAuthCommand(args, ctx, pi, options.agentDir);
       return { consume: true };
     });
   });
@@ -315,9 +313,11 @@ export function registerAuthCommand(pi: ExtensionAPI): void {
     description: "Connect a curated provider, or edit the fallback chain",
     getArgumentCompletions: (prefix) => {
       const q = prefix.trim().toLowerCase();
-      const providers = CURATED_PROVIDERS.filter(
-        (p) => !q || p.id.startsWith(q) || p.piId.startsWith(q) || p.label.toLowerCase().includes(q),
-      ).map((p) => ({
+      const providers = providersForUi()
+        .filter(
+          (p) => !q || p.id.startsWith(q) || p.piId.startsWith(q) || p.label.toLowerCase().includes(q),
+        )
+        .map((p) => ({
         value: p.id,
         label: p.label,
         description: p.methods.join(", "),
@@ -332,7 +332,7 @@ export function registerAuthCommand(pi: ExtensionAPI): void {
       return providers;
     },
     handler: async (args, ctx) => {
-      await runAuthCommand(args, ctx, pi);
+      await runAuthCommand(args, ctx, pi, options.agentDir);
     },
   });
 }

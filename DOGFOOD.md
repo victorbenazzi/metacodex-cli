@@ -24,10 +24,9 @@ Marca o item quando passar.
 which mcx
 mcx --version
 mcx --help
-mcx update
 ```
 
-Esperado: `~/.local/bin/mcx`, `mcx 0.0.1`, help nosso, e o `update` recusado (`pins the Pi engine`). Sem InteractiveMode.
+Esperado: `~/.local/bin/mcx`, `mcx 0.0.1`, help nosso com `mcx update`. Não rode `mcx update` neste checklist. Sem InteractiveMode.
 
 Carteiras. Não precisa das sete. Precisa de **duas** para handoff e fallback:
 

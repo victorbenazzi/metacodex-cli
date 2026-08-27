@@ -3,16 +3,23 @@ import type {
   ExtensionCommandContext,
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { isCuratedPiProvider } from "../catalog.js";
-import { createSelectPacketGate, withoutSelectPacket, type SelectPacketGate } from "./select-packet.js";
+import { curatedSessionModels, findCuratedByPiId, isCuratedPiProvider, parseProviderModel } from "../catalog.js";
+import {
+  formatModelRows,
+  formatProviderPickRows,
+  parseModelRow,
+  parseProviderPickRow,
+  providersInModels,
+  sortModelsForPicker,
+} from "../picker.js";
+import { isEnterKey } from "./auth-redirect.js";
 import {
   buildHandoffPacket,
   deriveHandoffFields,
-  formatHandoffOption,
   HANDOFF_CUSTOM_TYPE,
+  hasConversationTurns,
   isCrossProvider,
   listHandoffTargets,
-  parseHandoffOption,
   shouldCompactForHandoff,
   type HandoffPacketInput,
   type HandoffSourceMessage,
@@ -22,9 +29,23 @@ const CANCEL = "Cancel";
 
 type SessionModel = NonNullable<ExtensionContext["model"]>;
 
+type SessionSwitchContext = ExtensionContext & {
+  isIdle?: () => boolean;
+  waitForIdle?: () => Promise<void>;
+};
+
+export function modelCommandArgs(text: string): string | undefined {
+  const trimmed = text.trim();
+  if (trimmed === "/model") return "";
+  if (trimmed.startsWith("/model ")) return trimmed.slice("/model ".length).trim();
+  return undefined;
+}
+
 function pickerPool(ctx: ExtensionContext): SessionModel[] {
-  if (ctx.scopedModels.length > 0) return ctx.scopedModels.map((scoped) => scoped.model);
-  return ctx.modelRegistry.getAvailable();
+  return curatedSessionModels({
+    scoped: ctx.scopedModels,
+    available: ctx.modelRegistry.getAvailable(),
+  });
 }
 
 function sourceMessages(ctx: ExtensionContext): HandoffSourceMessage[] {
@@ -82,16 +103,19 @@ function compactIfNeeded(
 
 async function pickDestination(
   args: string,
-  ctx: ExtensionCommandContext,
+  ctx: ExtensionContext,
   current: SessionModel,
+  title: string,
+  includeCurrent = false,
 ): Promise<SessionModel | undefined> {
-  const targets = listHandoffTargets(pickerPool(ctx), current);
+  const pool = pickerPool(ctx);
+  const targets = includeCurrent ? pool : listHandoffTargets(pool, current);
   if (targets.length === 0) {
     ctx.ui.notify("No other curated model is connected. Use /auth.", "error");
     return undefined;
   }
 
-  const fromArgs = parseHandoffOption(args);
+  const fromArgs = parseProviderModel(args);
   if (fromArgs) {
     if (fromArgs.provider === current.provider && fromArgs.id === current.id) {
       ctx.ui.notify("Already using that model.", "info");
@@ -103,58 +127,120 @@ async function pickDestination(
     return undefined;
   }
 
-  const picked = await ctx.ui.select("Handoff to", [
-    ...targets.map((model) => formatHandoffOption(model)),
-    CANCEL,
-  ]);
+  const providers = providersInModels(targets);
+  let providerId = providers[0]?.piId;
+  if (!providerId) return undefined;
+
+  if (providers.length > 1) {
+    const picked = await ctx.ui.select(title, [...formatProviderPickRows(providers), CANCEL]);
+    if (!picked || picked === CANCEL) return undefined;
+    const id = parseProviderPickRow(picked, providers);
+    if (!id) return undefined;
+    providerId = id;
+  }
+
+  const models = targets.filter((model) => model.provider === providerId);
+  const label = findCuratedByPiId(providerId)?.label ?? providerId;
+  const heading = providers.length > 1 ? `${title} · ${label}` : title;
+  const rows = formatModelRows(models, includeCurrent ? current : undefined);
+  const picked = await ctx.ui.select(heading, [...rows, CANCEL]);
   if (!picked || picked === CANCEL) return undefined;
-  const parsed = parseHandoffOption(picked);
+  const parsed = parseModelRow(picked, providerId, models);
   if (!parsed) return undefined;
-  return targets.find((model) => model.provider === parsed.provider && model.id === parsed.id);
+  const match = models.find((model) => model.provider === parsed.provider && model.id === parsed.id);
+  if (!match) return undefined;
+  if (match.provider === current.provider && match.id === current.id) {
+    ctx.ui.notify("Already using that model.", "info");
+    return undefined;
+  }
+  return match;
+}
+
+async function switchTo(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  dest: SessionModel,
+): Promise<boolean> {
+  const ok = await pi.setModel(dest);
+  if (!ok) {
+    ctx.ui.notify(`No API key for ${dest.provider}/${dest.id}`, "error");
+    return false;
+  }
+  return true;
+}
+
+async function waitIfBusy(ctx: SessionSwitchContext): Promise<void> {
+  if (ctx.isIdle && !ctx.isIdle()) await ctx.waitForIdle?.();
 }
 
 async function runHandoffCommand(
   args: string,
   ctx: ExtensionCommandContext,
   pi: ExtensionAPI,
-  gate: { suppressSelectPacket: boolean },
 ): Promise<void> {
   if (!ctx.model) {
     ctx.ui.notify("No current model. Connect a provider with /auth.", "error");
     return;
   }
-  if (!ctx.isIdle()) await ctx.waitForIdle();
+  await waitIfBusy(ctx);
 
   const from = ctx.model;
-  const dest = await pickDestination(args, ctx, from);
+  const dest = await pickDestination(args, ctx, from, "Handoff to");
   if (!dest) return;
+
+  const messages = sourceMessages(ctx);
+  if (!hasConversationTurns(messages)) {
+    if (!(await switchTo(ctx, pi, dest))) return;
+    ctx.ui.notify(`Switched to ${dest.provider}/${dest.id}`, "info");
+    return;
+  }
 
   const instruction = await ctx.ui.input("Optional instruction for the next model");
   if (instruction === undefined) return;
 
-  const packet = buildPacket(from, dest, sourceMessages(ctx), instruction);
+  const packet = buildPacket(from, dest, messages, instruction);
   await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow);
-
-  await withoutSelectPacket(gate, async () => {
-    const ok = await pi.setModel(dest);
-    if (!ok) {
-      ctx.ui.notify(`No API key for ${dest.provider}/${dest.id}`, "error");
-      return;
-    }
-    injectPacket(pi, packet, true);
-    ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
-  });
+  if (!(await switchTo(ctx, pi, dest))) return;
+  injectPacket(pi, packet, true);
+  ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
 }
 
-export function registerHandoff(
+async function runModelCommand(
+  args: string,
+  ctx: SessionSwitchContext,
   pi: ExtensionAPI,
-  options: { selectPacketGate?: SelectPacketGate } = {},
-): void {
-  const gate = options.selectPacketGate ?? createSelectPacketGate();
+): Promise<void> {
+  if (!ctx.model) {
+    ctx.ui.notify("No current model. Connect a provider with /auth.", "error");
+    return;
+  }
+  await waitIfBusy(ctx);
+
+  const from = ctx.model;
+  const dest = await pickDestination(args, ctx, from, "Switch model", true);
+  if (!dest) return;
+
+  const messages = sourceMessages(ctx);
+  const cross =
+    isCrossProvider(from.provider, dest.provider) &&
+    isCuratedPiProvider(dest.provider) &&
+    hasConversationTurns(messages);
+  if (cross) {
+    await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow);
+  }
+  if (!(await switchTo(ctx, pi, dest))) return;
+  if (!cross) return;
+
+  injectPacket(pi, buildPacket(from, dest, messages), false);
+  ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
+}
+
+export function registerHandoff(pi: ExtensionAPI): void {
   let lastTargets: SessionModel[] = [];
+  let stopModelRedirect: (() => void) | undefined;
 
   const rememberTargets = (ctx: ExtensionContext): void => {
-    lastTargets = listHandoffTargets(pickerPool(ctx), ctx.model);
+    lastTargets = sortModelsForPicker(listHandoffTargets(pickerPool(ctx), ctx.model));
   };
 
   pi.registerCommand("handoff", {
@@ -174,25 +260,30 @@ export function registerHandoff(
     },
     handler: async (args, ctx) => {
       rememberTargets(ctx);
-      await runHandoffCommand(args, ctx, pi, gate);
+      await runHandoffCommand(args, ctx, pi);
     },
+  });
+
+  pi.on("session_shutdown", () => {
+    stopModelRedirect?.();
+    stopModelRedirect = undefined;
   });
 
   pi.on("session_start", (_event, ctx) => {
     rememberTargets(ctx);
+    stopModelRedirect?.();
+    if (ctx.mode !== "tui") return;
+    stopModelRedirect = ctx.ui.onTerminalInput((data) => {
+      if (!isEnterKey(data)) return;
+      const args = modelCommandArgs(ctx.ui.getEditorText());
+      if (args === undefined) return;
+      ctx.ui.setEditorText("");
+      void runModelCommand(args, ctx, pi);
+      return { consume: true };
+    });
   });
 
-  pi.on("model_select", async (event, ctx) => {
+  pi.on("model_select", (_event, ctx) => {
     rememberTargets(ctx);
-    if (gate.suppressSelectPacket) return;
-    if (event.source === "restore") return;
-    if (!event.previousModel) return;
-    if (!isCrossProvider(event.previousModel.provider, event.model.provider)) return;
-    if (!isCuratedPiProvider(event.model.provider)) return;
-
-    const packet = buildPacket(event.previousModel, event.model, sourceMessages(ctx));
-    await compactIfNeeded(ctx, event.previousModel.contextWindow, event.model.contextWindow);
-    injectPacket(pi, packet, false);
-    ctx.ui.notify(`Handed off to ${event.model.provider}/${event.model.id}`, "info");
   });
 }

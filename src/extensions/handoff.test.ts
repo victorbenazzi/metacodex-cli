@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { HANDOFF_CUSTOM_TYPE } from "../router/handoff.js";
-import { registerHandoff } from "./handoff.js";
+import { modelCommandArgs, registerHandoff } from "./handoff.js";
 
 type Handler = (event: Record<string, unknown>, ctx: unknown) => unknown;
 
@@ -9,7 +9,7 @@ function model(provider: string, id: string, contextWindow: number) {
   return { provider, id, name: id, contextWindow };
 }
 
-function createHarness(options?: { instruction?: string | undefined }) {
+function createHarness(options?: { instruction?: string | undefined; emptyThread?: boolean }) {
   const handlers = new Map<string, Handler[]>();
   const commands = new Map<
     string,
@@ -24,12 +24,16 @@ function createHarness(options?: { instruction?: string | undefined }) {
   const setModels: { provider: string; id: string }[] = [];
   const notices: string[] = [];
   let compactCalls = 0;
+  let editor = "";
+  let inputHandler: ((data: string) => { consume?: boolean } | undefined) | undefined;
 
   const anthropic = model("anthropic", "opus", 200_000);
+  const sonnet = model("anthropic", "sonnet", 200_000);
   const deepseek = model("deepseek", "deepseek-chat", 64_000);
-  const available = [anthropic, deepseek];
+  const available = [anthropic, sonnet, deepseek];
 
   const ctx = {
+    mode: "tui" as const,
     model: anthropic,
     scopedModels: [] as { model: ReturnType<typeof model> }[],
     isIdle: () => true,
@@ -40,22 +44,25 @@ function createHarness(options?: { instruction?: string | undefined }) {
         available.find((item) => item.provider === provider && item.id === id),
     },
     sessionManager: {
-      buildContextEntries: () => [
-        { type: "message", message: { role: "user", content: "cover the hop" } },
-        {
-          type: "message",
-          message: {
-            role: "assistant",
-            content: [
+      buildContextEntries: () =>
+        options?.emptyThread
+          ? []
+          : [
+              { type: "message", message: { role: "user", content: "cover the hop" } },
               {
-                type: "toolCall",
-                name: "edit",
-                arguments: { path: "src/router/fallback.ts" },
+                type: "message",
+                message: {
+                  role: "assistant",
+                  content: [
+                    {
+                      type: "toolCall",
+                      name: "edit",
+                      arguments: { path: "src/router/fallback.ts" },
+                    },
+                  ],
+                },
               },
             ],
-          },
-        },
-      ],
     },
     compact: (opts?: { onComplete?: (result: never) => void }) => {
       compactCalls += 1;
@@ -67,6 +74,16 @@ function createHarness(options?: { instruction?: string | undefined }) {
       },
       select: async () => undefined,
       input: async () => options?.instruction,
+      getEditorText: () => editor,
+      setEditorText(text: string) {
+        editor = text;
+      },
+      onTerminalInput(handler: (data: string) => { consume?: boolean } | undefined) {
+        inputHandler = handler;
+        return () => {
+          inputHandler = undefined;
+        };
+      },
     },
   };
 
@@ -119,8 +136,22 @@ function createHarness(options?: { instruction?: string | undefined }) {
       return compactCalls;
     },
     emit,
+    async submitEditor(text: string) {
+      editor = text;
+      const result = inputHandler?.("\r");
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+      return result;
+    },
   };
 }
+
+describe("modelCommandArgs", () => {
+  it("maps /model onto an optional provider/id arg", () => {
+    expect(modelCommandArgs("/model")).toBe("");
+    expect(modelCommandArgs("  /model deepseek/deepseek-chat  ")).toBe("deepseek/deepseek-chat");
+    expect(modelCommandArgs("/handoff")).toBeUndefined();
+  });
+});
 
 describe("registerHandoff", () => {
   it("injects a packet on /handoff, switches model, and does not double-inject via model_select", async () => {
@@ -147,29 +178,45 @@ describe("registerHandoff", () => {
   it("injects a packet on /model across providers, without an instruction prompt", async () => {
     const harness = createHarness();
     await harness.emit("session_start");
-    await harness.emit("model_select", {
-      model: model("deepseek", "deepseek-chat", 64_000),
-      previousModel: model("anthropic", "opus", 200_000),
-      source: "set",
-    });
+    const consumed = await harness.submitEditor("/model deepseek/deepseek-chat");
+    expect(consumed).toEqual({ consume: true });
     expect(harness.packets).toHaveLength(1);
     expect(harness.packets[0]?.content).toContain("This session is a handoff");
     expect(harness.packets[0]?.content).not.toContain("User instruction");
     expect(harness.packets[0]?.triggerTurn).toBe(false);
   });
 
-  it("does not inject on same-provider /model or session restore", async () => {
+  it("does not inject on same-provider /model or a raw model_select restore", async () => {
     const harness = createHarness();
-    await harness.emit("model_select", {
-      model: model("anthropic", "sonnet", 200_000),
-      previousModel: model("anthropic", "opus", 200_000),
-      source: "set",
-    });
+    await harness.emit("session_start");
+    await harness.submitEditor("/model anthropic/sonnet");
     await harness.emit("model_select", {
       model: model("deepseek", "deepseek-chat", 64_000),
       previousModel: model("anthropic", "opus", 200_000),
       source: "restore",
     });
     expect(harness.packets).toHaveLength(0);
+  });
+
+  it("does not inject a packet when /model crosses providers on an empty thread", async () => {
+    const harness = createHarness({ emptyThread: true });
+    await harness.emit("session_start");
+    await harness.submitEditor("/model deepseek/deepseek-chat");
+    expect(harness.setModels).toEqual([
+      { provider: "deepseek", id: "deepseek-chat", name: "deepseek-chat", contextWindow: 64_000 },
+    ]);
+    expect(harness.packets).toHaveLength(0);
+    expect(harness.notices.some((n) => n.startsWith("Handed off to"))).toBe(false);
+  });
+
+  it("switches on /handoff without a packet when the thread has no conversation", async () => {
+    const harness = createHarness({ emptyThread: true, instruction: "should not be asked" });
+    await harness.emit("session_start");
+    await harness.commands.get("handoff")?.handler("deepseek/deepseek-chat", harness.ctx);
+    expect(harness.setModels).toEqual([
+      { provider: "deepseek", id: "deepseek-chat", name: "deepseek-chat", contextWindow: 64_000 },
+    ]);
+    expect(harness.packets).toHaveLength(0);
+    expect(harness.notices).toContain("Switched to deepseek/deepseek-chat");
   });
 });

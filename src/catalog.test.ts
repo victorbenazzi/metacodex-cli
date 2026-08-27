@@ -3,9 +3,12 @@ import {
   CURATED_PROVIDERS,
   curatedEnabledModelPatterns,
   curatedModelsOnly,
+  curatedSessionModels,
   enabledModelPatternsForPiIds,
   findCuratedProvider,
   isCuratedPiProvider,
+  parseProviderModel,
+  providersForUi,
   storedCuratedPiIds,
 } from "./catalog.js";
 
@@ -19,6 +22,18 @@ describe("catalog", () => {
       "opencode-go",
       "deepseek",
       "kimi-coding",
+    ]);
+  });
+
+  it("sorts pickers by label and keeps the grill table order for defaults", () => {
+    expect(providersForUi().map((p) => p.label)).toEqual([
+      "Anthropic",
+      "DeepSeek",
+      "Kimi",
+      "OpenAI API",
+      "OpenAI Codex",
+      "OpenCode Go",
+      "OpenCode Zen",
     ]);
   });
 
@@ -55,6 +70,36 @@ describe("enabledModelPatternsForPiIds", () => {
       "deepseek/*",
     ]);
     expect(storedCuratedPiIds({ anthropic: {}, openrouter: {} })).toEqual(["anthropic"]);
+  });
+});
+
+describe("parseProviderModel", () => {
+  it("reads provider/id from a picker row or a raw key", () => {
+    expect(parseProviderModel("deepseek/deepseek-chat  DeepSeek Chat")).toEqual({
+      provider: "deepseek",
+      id: "deepseek-chat",
+    });
+    expect(parseProviderModel("not-a-model")).toBeUndefined();
+  });
+});
+
+describe("curatedSessionModels", () => {
+  it("prefers scoped models and drops uncurated providers", () => {
+    expect(
+      curatedSessionModels({
+        scoped: [],
+        available: [
+          { provider: "anthropic", id: "opus" },
+          { provider: "google", id: "gemini" },
+        ],
+      }),
+    ).toEqual([{ provider: "anthropic", id: "opus" }]);
+    expect(
+      curatedSessionModels({
+        scoped: [{ model: { provider: "deepseek", id: "deepseek-chat" } }],
+        available: [{ provider: "anthropic", id: "opus" }],
+      }),
+    ).toEqual([{ provider: "deepseek", id: "deepseek-chat" }]);
   });
 });
 

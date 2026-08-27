@@ -1,4 +1,4 @@
-import { MCX_BIN } from "./version.js";
+import { MCX_BIN } from "../version.js";
 
 /** Pi prints `pi --session <id>` on quit. Sessions live under ~/.mcx. */
 export function rewriteResumeHint(text: string): string {

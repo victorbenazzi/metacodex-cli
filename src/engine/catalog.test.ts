@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hideUncuratedCatalog } from "./catalog-runtime.js";
+import { hideUncuratedCatalog } from "./catalog.js";
 
 describe("hideUncuratedCatalog", () => {
   it("filters ModelRuntime availability to curated providers", async () => {

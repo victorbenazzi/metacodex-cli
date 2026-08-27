@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { parseProviderModel } from "../catalog.js";
 import {
   buildHandoffPacket,
   deriveHandoffFields,
   formatHandoffOption,
+  hasConversationTurns,
   isCrossProvider,
   listHandoffTargets,
-  parseHandoffOption,
   shouldCompactForHandoff,
 } from "./handoff.js";
 
@@ -51,8 +52,8 @@ describe("handoff selector rows", () => {
       id: "deepseek-chat",
       name: "DeepSeek Chat",
     });
-    expect(parseHandoffOption(row)).toEqual({ provider: "deepseek", id: "deepseek-chat" });
-    expect(parseHandoffOption("not-a-model")).toBeUndefined();
+    expect(parseProviderModel(row)).toEqual({ provider: "deepseek", id: "deepseek-chat" });
+    expect(parseProviderModel("not-a-model")).toBeUndefined();
   });
 });
 
@@ -105,5 +106,29 @@ describe("deriveHandoffFields", () => {
       alreadyDone: "(not specified)",
       doNotRedo: "(see already done)",
     });
+  });
+});
+
+describe("hasConversationTurns", () => {
+  it("ignores empty threads, handoff packets, and non-chat roles", () => {
+    expect(hasConversationTurns([])).toBe(false);
+    expect(hasConversationTurns([{ role: "system", content: "skill prompt" }])).toBe(false);
+    expect(
+      hasConversationTurns([
+        { role: "user", content: "This session is a handoff. You are taking over an in-flight coding task." },
+      ]),
+    ).toBe(false);
+  });
+
+  it("counts a user prompt or assistant tool work", () => {
+    expect(hasConversationTurns([{ role: "user", content: "cover the hop" }])).toBe(true);
+    expect(
+      hasConversationTurns([
+        {
+          role: "assistant",
+          content: [{ type: "toolCall", name: "read", arguments: { path: "src/cli.ts" } }],
+        },
+      ]),
+    ).toBe(true);
   });
 });

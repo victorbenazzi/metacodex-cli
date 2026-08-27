@@ -1,12 +1,8 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { HANDOFF_CUSTOM_TYPE } from "../router/handoff.js";
-import { loadFallbackSettings, registerFallback, saveFallbackSettings } from "./fallback.js";
+import { registerFallback } from "./fallback.js";
 import { registerHandoff } from "./handoff.js";
-import { createSelectPacketGate } from "./select-packet.js";
 
 type Handler = (event: Record<string, unknown>, ctx: ExtensionContext) => unknown;
 
@@ -21,7 +17,6 @@ function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
   const attention: string[] = [];
   const packets: { customType: string }[] = [];
   const statuses = new Map<string, string | undefined>();
-  const selectPacketGate = createSelectPacketGate();
 
   const anthropic = model("anthropic", "opus", 200_000);
   const deepseek = model("deepseek", "deepseek-chat", 64_000);
@@ -84,14 +79,14 @@ function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
   };
 
   registerFallback(pi as unknown as ExtensionAPI, {
+    agentDir: "/tmp/mcx-fallback-test",
     loadSettings: () => ({ chain, maxHops: 2 }),
     onAttention: (kind) => {
       attention.push(kind);
     },
-    selectPacketGate,
   });
   if (options?.withHandoff) {
-    registerHandoff(pi as unknown as ExtensionAPI, { selectPacketGate });
+    registerHandoff(pi as unknown as ExtensionAPI);
   }
 
   return { emit, setModels, notices, statuses, attention, packets };
@@ -204,31 +199,5 @@ describe("registerFallback", () => {
     expect(harness.setModels).toHaveLength(1);
     expect(harness.packets.filter((packet) => packet.customType === HANDOFF_CUSTOM_TYPE)).toEqual([]);
     expect(harness.notices).toEqual(["retrying on deepseek (rate_limit anthropic)"]);
-  });
-});
-
-describe("loadFallbackSettings", () => {
-  it("reads fallback.chain from ~/.mcx settings.json", async () => {
-    const home = await mkdtemp(join(tmpdir(), "mcx-fallback-"));
-    await writeFile(
-      join(home, "settings.json"),
-      JSON.stringify({ fallback: { chain: ["anthropic", "deepseek"], maxHops: 1 } }),
-    );
-    expect(await loadFallbackSettings(home)).toEqual({
-      chain: ["anthropic", "deepseek"],
-      maxHops: 1,
-    });
-  });
-
-  it("merges fallback into existing settings without dropping enabledModels", async () => {
-    const home = await mkdtemp(join(tmpdir(), "mcx-fallback-save-"));
-    await writeFile(join(home, "settings.json"), JSON.stringify({ enabledModels: ["anthropic/*"] }));
-    await saveFallbackSettings(home, { chain: ["deepseek", "kimi-coding"], maxHops: 2 });
-    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
-      enabledModels: string[];
-      fallback: { chain: string[]; maxHops: number };
-    };
-    expect(raw.enabledModels).toEqual(["anthropic/*"]);
-    expect(raw.fallback).toEqual({ chain: ["deepseek", "kimi-coding"], maxHops: 2 });
   });
 });

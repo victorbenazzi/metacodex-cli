@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHILD_SYSTEM_PROMPT,
   MAX_LIVE_CHILDREN,
   buildSubagentBrief,
   canSpawn,
-  childToolsIncludeSpawn,
   extractChildReport,
   formatSpawnProgress,
   resolveChildSkills,
@@ -19,7 +19,6 @@ describe("subagent", () => {
 
   it("opts into write/edit only when asked, never spawn", () => {
     expect(resolveChildTools(["read", "edit", "spawn", "rm"])).toEqual(["read", "edit"]);
-    expect(childToolsIncludeSpawn(resolveChildTools(["write", "spawn"]))).toBe(false);
   });
 
   it("starts children with zero skills unless allowlisted", () => {
@@ -34,16 +33,19 @@ describe("subagent", () => {
       objective: "find the grant check",
       paths: ["src-tauri/src/util/paths.rs"],
     });
-    expect(brief).toContain("You do not have the parent transcript");
-    expect(brief).toContain("Do not spawn other agents");
+    expect(CHILD_SYSTEM_PROMPT).toContain("You do not have the parent transcript");
+    expect(CHILD_SYSTEM_PROMPT).toContain("You cannot spawn other agents");
+    expect(brief).toContain("find the grant check");
     expect(brief).toContain("src-tauri/src/util/paths.rs");
+    expect(brief).not.toContain("You do not have the parent transcript");
     expect(brief).not.toContain("Previous model");
   });
 
   it("wraps the spawn prompt so the child never sees a parent transcript", () => {
     const wrapped = wrapChildPrompt("find the grant check");
-    expect(wrapped).toContain("You do not have the parent transcript");
+    expect(wrapped).toContain("Objective:");
     expect(wrapped).toContain("find the grant check");
+    expect(wrapped).not.toContain("You do not have the parent transcript");
   });
 
   it("pins the requested model, else the parent, else the fallback chain", () => {

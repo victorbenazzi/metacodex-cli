@@ -1,3 +1,5 @@
+import { parseProviderModel } from "../catalog.js";
+
 export const DEFAULT_CHILD_TOOLS = ["read", "bash", "grep", "find", "ls"] as const;
 export const OPT_IN_WRITE_TOOLS = ["write", "edit"] as const;
 export const SPAWN_TOOL_NAME = "spawn";
@@ -43,6 +45,13 @@ export function resolveChildSkills(requested?: string[]): string[] {
   return [...new Set(requested.map((s) => s.trim()).filter(Boolean))];
 }
 
+export const CHILD_SYSTEM_PROMPT = [
+  "You are a subagent of mcx.",
+  "You do not have the parent transcript.",
+  "Do the assigned work and return a single report.",
+  "You cannot spawn other agents.",
+].join(" ");
+
 export function buildSubagentBrief(input: SubagentBriefInput): string {
   const paths =
     input.paths && input.paths.length > 0
@@ -51,9 +60,6 @@ export function buildSubagentBrief(input: SubagentBriefInput): string {
   const constraints = input.constraints?.trim() || "(none given)";
 
   return [
-    "You are a subagent. You do not have the parent transcript.",
-    "Do the assigned work and return a single report. Do not spawn other agents.",
-    "",
     "Objective:",
     input.objective.trim(),
     "",
@@ -63,10 +69,6 @@ export function buildSubagentBrief(input: SubagentBriefInput): string {
     "Paths in scope:",
     paths,
   ].join("\n");
-}
-
-export function childToolsIncludeSpawn(tools: readonly string[]): boolean {
-  return tools.includes(SPAWN_TOOL_NAME);
 }
 
 export function wrapChildPrompt(prompt: string): string {
@@ -108,14 +110,6 @@ export function extractChildReport(
   return "(no report)";
 }
 
-export function parseSpawnModel(raw: string): { provider: string; id: string } | undefined {
-  const key = raw.trim().split(/\s+/u)[0];
-  if (!key) return undefined;
-  const slash = key.indexOf("/");
-  if (slash <= 0 || slash === key.length - 1) return undefined;
-  return { provider: key.slice(0, slash), id: key.slice(slash + 1) };
-}
-
 export function resolveSpawnModel(input: {
   requested?: string;
   current?: { provider: string; id: string };
@@ -128,7 +122,7 @@ export function resolveSpawnModel(input: {
     input.models.find((model) => model.provider === provider);
 
   if (input.requested) {
-    const parsed = parseSpawnModel(input.requested);
+    const parsed = parseProviderModel(input.requested);
     if (!parsed || !has(parsed.provider, parsed.id)) return undefined;
     return parsed;
   }

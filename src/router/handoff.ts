@@ -54,12 +54,21 @@ export function listHandoffTargets<T extends { provider: string; id: string }>(
   });
 }
 
-export function parseHandoffOption(option: string): { provider: string; id: string } | undefined {
-  const key = option.trim().split(/\s+/)[0];
-  if (!key) return undefined;
-  const slash = key.indexOf("/");
-  if (slash <= 0 || slash === key.length - 1) return undefined;
-  return { provider: key.slice(0, slash), id: key.slice(slash + 1) };
+/** True when the thread has a real user/assistant turn. Skills, MCP, and system prompt do not count. */
+export function hasConversationTurns(messages: readonly HandoffSourceMessage[]): boolean {
+  return messages.some((message) => {
+    if (message.role === "user") {
+      const text = contentText(message.content);
+      return Boolean(text) && !text.startsWith("This session is a handoff");
+    }
+    if (message.role !== "assistant") return false;
+    if (typeof message.content === "string") return message.content.trim().length > 0;
+    if (!Array.isArray(message.content)) return false;
+    return message.content.some((block) => {
+      if (block.type === "text") return Boolean(block.text?.trim());
+      return block.type === "toolCall" || block.type === "toolUse";
+    });
+  });
 }
 
 function contentText(content: HandoffSourceMessage["content"]): string {

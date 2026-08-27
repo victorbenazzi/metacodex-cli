@@ -1,4 +1,4 @@
-import { curatedModelsOnly, isCuratedPiProvider } from "./catalog.js";
+import { curatedModelsOnly, isCuratedPiProvider } from "../catalog.js";
 
 type AvailableModel = { provider: string };
 

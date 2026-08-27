@@ -1,19 +1,16 @@
-import { readFile, writeFile } from "node:fs/promises";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { isCuratedPiProvider } from "../catalog.js";
-import { mcxPaths } from "../home.js";
 import {
   classifyProviderFailure,
   disguiseOverflowForRetry,
   isAuthFailure,
-  parseFallbackSettings,
   planHop,
   type FallbackSettings,
   type HopCandidate,
   type ProviderFailure,
 } from "../router/fallback.js";
+import { loadFallbackSettings } from "../settings.js";
 import type { AttentionKind } from "./osc.js";
-import { withoutSelectPacket, type SelectPacketGate } from "./select-packet.js";
 import { stripForProvider, type RouterMessage } from "../router/strip.js";
 
 type AssistantLike = {
@@ -33,47 +30,6 @@ interface FallbackState {
 export type LoadFallbackSettings = () => Promise<FallbackSettings> | FallbackSettings;
 
 export type FallbackAttention = (kind: AttentionKind) => void;
-
-function emptySettings(): FallbackSettings {
-  return parseFallbackSettings(undefined);
-}
-
-export async function loadFallbackSettings(agentDir: string): Promise<FallbackSettings> {
-  return parseFallbackSettings(await readSettingsObject(agentDir));
-}
-
-export async function saveFallbackSettings(
-  agentDir: string,
-  settings: FallbackSettings,
-): Promise<void> {
-  const existing = (await readSettingsObject(agentDir)) ?? {};
-  const next = {
-    ...existing,
-    fallback: {
-      chain: settings.chain,
-      maxHops: settings.maxHops,
-    },
-  };
-  await writeFile(mcxPaths(agentDir).settings, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-}
-
-async function readSettingsObject(agentDir: string): Promise<Record<string, unknown> | undefined> {
-  try {
-    const raw: unknown = JSON.parse(await readFile(mcxPaths(agentDir).settings, "utf8"));
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      return raw as Record<string, unknown>;
-    }
-    return {};
-  } catch {
-    return undefined;
-  }
-}
-
-function defaultLoadSettings(): Promise<FallbackSettings> {
-  const agentDir = process.env.PI_CODING_AGENT_DIR;
-  if (!agentDir) return Promise.resolve(emptySettings());
-  return loadFallbackSettings(agentDir);
-}
 
 function isAssistant(message: { role: string }): message is AssistantLike {
   return message.role === "assistant";
@@ -151,12 +107,12 @@ function announceAttention(
 export function registerFallback(
   pi: ExtensionAPI,
   options: {
+    agentDir: string;
     loadSettings?: LoadFallbackSettings;
     onAttention?: FallbackAttention;
-    selectPacketGate?: SelectPacketGate;
-  } = {},
+  },
 ): void {
-  const loadSettings = options.loadSettings ?? defaultLoadSettings;
+  const loadSettings = options.loadSettings ?? (() => loadFallbackSettings(options.agentDir));
   const state: FallbackState = {
     hopIndex: 0,
     compactedAlready: false,
@@ -259,9 +215,7 @@ export function registerFallback(
       }
 
       const model = ctx.modelRegistry.find(plan.to.provider, plan.to.modelId);
-      const switched =
-        model &&
-        (await withoutSelectPacket(options.selectPacketGate, () => pi.setModel(model)));
+      const switched = model && (await pi.setModel(model));
       if (!model || !switched) {
         skip.add(plan.to.provider);
         continue;

@@ -5,6 +5,9 @@
 
 import { MCX_PRODUCT } from "../version.js";
 
+/** Compact product name for terminal titles when no model is selected. */
+export const MCX_TITLE = "metacodex";
+
 export const MCX_MARK: readonly string[] = [
   " ▄███████████▄",
   "█████████████▀",

@@ -54,6 +54,7 @@ function createHarness(runChild: (request: ChildRunRequest) => Promise<{ ok: boo
   };
 
   registerSpawn(pi as unknown as ExtensionAPI, {
+    agentDir: "/tmp/mcx-spawn-home",
     runChild: async (request) => runChild(request),
     writeOsc: (sequence) => {
       osc.push(sequence);
@@ -102,7 +103,7 @@ describe("registerSpawn", () => {
     });
 
     expect(seen).toHaveLength(1);
-    expect(seen[0]?.brief).toContain("You do not have the parent transcript");
+    expect(seen[0]?.brief).toContain("Objective:");
     expect(seen[0]?.brief).toContain("find the grant check");
     expect(seen[0]?.tools).toEqual(["read", "write"]);
     expect(seen[0]?.skills).toEqual([]);

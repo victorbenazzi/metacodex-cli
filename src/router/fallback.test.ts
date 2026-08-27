@@ -5,7 +5,6 @@ import {
   disguiseOverflowForRetry,
   formatHopNotice,
   isAuthFailure,
-  nextInChain,
   parseFallbackSettings,
   planHop,
 } from "./fallback.js";
@@ -72,8 +71,6 @@ describe("chain", () => {
     expect(canHop(0)).toBe(true);
     expect(canHop(1)).toBe(true);
     expect(canHop(2)).toBe(false);
-    expect(nextInChain(["anthropic", "deepseek"], 0)).toBe("deepseek");
-    expect(nextInChain(["anthropic", "deepseek"], 1)).toBeUndefined();
   });
 
   it("formats a visible TUI notice", () => {

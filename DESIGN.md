@@ -21,7 +21,7 @@ Não é um fork do Pi. Não é um fork do Grok Build. Não é o Agent view que m
 | 5 | Home | Completamente separado do app. `~/.mcx`. Só `MCX_HOME`. Não lê `METACODEX_HOME`. |
 | 6 | App no v1 | PTY only. Entrada futura no `cli-registry` (`command: "mcx"`). Sem RPC, sem embed. |
 | 7 | Fallback | Só transporte. Cadeia explícita. Máx 2 hops. Visível. 401 não hopa. |
-| 8 | Handoff | Só o usuário. `/handoff` = seletor tipo `/model` + instrução opcional. Pacote **sempre** injetado. `/model` cross-provider também gera pacote, sem prompt de instrução. Sem tool de handoff. |
+| 8 | Handoff | Só o usuário. `/handoff` = seletor tipo `/model` + instrução opcional. Pacote só se a thread tiver conversa. `/model` cross-provider igual, sem prompt de instrução. Thread vazia: só troca o modelo. Sem tool de handoff. |
 | 9 | Subagent | Foreground default. Até 3 ao vivo. Sem ninho. Abort em cascata. Sem worktree. Timeout 10 min. |
 | 10 | Skills | Agent Skills (`SKILL.md`). Nossas + descoberta read-only de Claude/Codex. Filho: allowlist. |
 | 11 | Providers v1 | Catálogo **curado**. Resto do Pi no motor, escondido. |
@@ -70,9 +70,9 @@ Editada em `/auth` (seção Fallback). Sem wizard no first-run.
 1. `/handoff`
 2. Seletor provider+modelo (igual `/model`, só o catálogo curado autenticado)
 3. Instrução opcional. Enter vazio segue.
-4. Sempre injeta o pacote (`customType: mcx-handoff`).
+4. Injeta o pacote (`customType: mcx-handoff`) se a thread tiver conversa. Thread sem turno de usuário/assistente: só troca o modelo. Skill, MCP e system prompt não contam.
 
-`/model` intra-família: troca boba, sem pacote. `/model` de provider diferente: pacote, sem passo de instrução.
+`/model` intra-família: troca boba, sem pacote. `/model` de provider diferente: pacote, sem passo de instrução. Thread sem conversa: troca boba, sem pacote.
 
 ## Subagent (tool `spawn`)
 
@@ -142,6 +142,7 @@ RPC, ACP, SDK no webview: não no v1. O Agent view não volta.
 | Idioma TUI | Inglês no v1. pt-BR depois. |
 | Tema | Tema `metacodex` no pi-tui quando for barato. Não bloqueia o roteador. |
 | Print | `mcx -p` (Pi print mode). |
+| Update | `mcx update` re-roda o instalador (GitHub `main`). Não é `pi update`. Não toca `~/.mcx`. |
 | RPC | Existe no motor. Não é produto no v1. |
 | Windows | Sim. |
 | Testes | Vitest no roteador: classify, strip, pacote de handoff, brief, cap de filhos, catálogo. |

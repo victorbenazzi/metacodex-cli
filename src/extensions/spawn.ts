@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import { Type } from "typebox";
 import {
   createAgentSession,
@@ -7,13 +8,14 @@ import {
   type ExtensionAPI,
   type ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { isCuratedPiProvider } from "../catalog.js";
-import { loadFallbackSettings } from "./fallback.js";
+import { curatedSessionModels } from "../catalog.js";
+import { loadFallbackSettings } from "../settings.js";
 import { mcxPaths } from "../home.js";
 import { oscAttention } from "../osc.js";
 import { extraSkillPaths } from "../skills/discovery.js";
 import type { OscWrite } from "./osc.js";
 import {
+  CHILD_SYSTEM_PROMPT,
   CHILD_TIMEOUT_MS,
   MAX_LIVE_CHILDREN,
   SPAWN_TOOL_NAME,
@@ -25,16 +27,8 @@ import {
   resolveSpawnModel,
   wrapChildPrompt,
 } from "../router/subagent.js";
-import { PI_AGENT_DIR_ENV } from "../version.js";
 
 export const SPAWN_REPORT_CUSTOM_TYPE = "mcx-spawn-report";
-
-const CHILD_SYSTEM = [
-  "You are a subagent of mcx.",
-  "You do not have the parent transcript.",
-  "Do the assigned work and return a single report.",
-  "You cannot spawn other agents.",
-].join(" ");
 
 export interface ChildRunRequest {
   description: string;
@@ -43,6 +37,7 @@ export interface ChildRunRequest {
   tools: readonly string[];
   skills: readonly string[];
   cwd: string;
+  agentDir: string;
   timeoutMs: number;
   signal: AbortSignal;
   onProgress: (line: string) => void;
@@ -66,13 +61,10 @@ type SpawnDetails = {
 };
 
 function availableModels(ctx: ExtensionContext): { provider: string; id: string }[] {
-  const pool =
-    ctx.scopedModels.length > 0
-      ? ctx.scopedModels.map((scoped) => scoped.model)
-      : ctx.modelRegistry.getAvailable();
-  return pool
-    .filter((model) => isCuratedPiProvider(model.provider))
-    .map((model) => ({ provider: model.provider, id: model.id }));
+  return curatedSessionModels({
+    scoped: ctx.scopedModels,
+    available: ctx.modelRegistry.getAvailable(),
+  }).map((model) => ({ provider: model.provider, id: model.id }));
 }
 
 function textFromPartial(value: unknown): string {
@@ -102,9 +94,9 @@ export async function runChildSession(
   request: ChildRunRequest,
   ctx: ExtensionContext,
 ): Promise<ChildRunResult> {
-  const agentDir = process.env[PI_AGENT_DIR_ENV];
+  const agentDir = request.agentDir;
   if (!agentDir) {
-    return { ok: false, report: "mcx home is not set (PI_CODING_AGENT_DIR)." };
+    return { ok: false, report: "mcx home is not set." };
   }
   const model = ctx.modelRegistry.find(request.model.provider, request.model.id);
   if (!model) {
@@ -112,7 +104,7 @@ export async function runChildSession(
   }
 
   const skills = [...request.skills];
-  const extraSkills = extraSkillPaths(request.cwd);
+  const extraSkills = extraSkillPaths(request.cwd, homedir(), agentDir);
   const loader = new DefaultResourceLoader({
     cwd: request.cwd,
     agentDir,
@@ -121,7 +113,7 @@ export async function runChildSession(
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: true,
-    systemPrompt: CHILD_SYSTEM,
+    systemPrompt: CHILD_SYSTEM_PROMPT,
     ...(extraSkills.length > 0 ? { additionalSkillPaths: extraSkills } : {}),
     skillsOverride: (base) => ({
       skills: skills.length === 0 ? [] : base.skills.filter((skill) => skills.includes(skill.name)),
@@ -184,7 +176,7 @@ export async function runChildSession(
 
 export function registerSpawn(
   pi: ExtensionAPI,
-  options: { runChild?: ChildRunner; writeOsc?: OscWrite } = {},
+  options: { agentDir: string; runChild?: ChildRunner; writeOsc?: OscWrite },
 ): void {
   const runChild = options.runChild ?? runChildSession;
   const writeOsc = options.writeOsc ?? ((sequence: string) => {
@@ -244,8 +236,7 @@ export function registerSpawn(
       const childAbort = new AbortController();
       live.set(childId, childAbort);
 
-      const agentDir = process.env[PI_AGENT_DIR_ENV];
-      const settings = agentDir ? await loadFallbackSettings(agentDir) : { chain: [], maxHops: 2 };
+      const settings = await loadFallbackSettings(options.agentDir);
       const resolved = resolveSpawnModel({
         ...(params.model ? { requested: params.model } : {}),
         ...(ctx.model ? { current: { provider: ctx.model.provider, id: ctx.model.id } } : {}),
@@ -276,6 +267,7 @@ export function registerSpawn(
         tools: resolveChildTools(params.tools),
         skills: resolveChildSkills(params.skills),
         cwd: ctx.cwd,
+        agentDir: options.agentDir,
         timeoutMs: CHILD_TIMEOUT_MS,
         signal: childAbort.signal,
         onProgress: (line) => {

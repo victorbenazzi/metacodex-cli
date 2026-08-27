@@ -1,22 +1,19 @@
 import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { chipClipboardImage, createImageChipState, expandImageChips, type ImageChipState } from "./image-chip.js";
+import { chipClipboardImage, createImageChipState, expandImageChips } from "./image-chip.js";
 
-type PasteExpander = { expandPasteMarkers: (text: string) => string };
-
+/**
+ * Editor that shows Pi clipboard image dumps as `[Image #N]` chips.
+ * `getExpandedText` swaps the chips back for real paths on submit,
+ * mirroring how pi-tui expands its own `[paste #N]` markers.
+ */
 export class McxEditor extends CustomEditor {
-  private readonly images: ImageChipState = createImageChipState();
-  private expanderPatched = false;
+  private readonly images = createImageChipState();
 
-  private ensureExpander(): void {
-    if (this.expanderPatched) return;
-    this.expanderPatched = true;
-    const self = this as unknown as PasteExpander;
-    const original = self.expandPasteMarkers.bind(this);
-    self.expandPasteMarkers = (text: string) => expandImageChips(original(text), this.images.chips);
+  override getExpandedText(): string {
+    return expandImageChips(super.getExpandedText(), this.images.chips);
   }
 
   override insertTextAtCursor(text: string): void {
-    this.ensureExpander();
     super.insertTextAtCursor(chipClipboardImage(text, this.images));
   }
 }

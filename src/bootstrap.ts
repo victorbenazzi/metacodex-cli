@@ -5,6 +5,7 @@ import { DEFAULT_THEME_SETTING } from "./brand/mark.js";
 import { enabledModelPatternsForPiIds, storedCuratedPiIds } from "./catalog.js";
 import { pasteKeybindingsConfig } from "./extensions/paste-keys.js";
 import { mcxPaths } from "./home.js";
+import { readSettings, writeSettings } from "./settings.js";
 
 export const DEFAULT_QUIET_STARTUP = true;
 
@@ -33,23 +34,8 @@ function sameStringList(left: unknown, right: readonly string[]): boolean {
   return left.every((item, index) => item === right[index]);
 }
 
-async function readSettingsObject(agentDir: string): Promise<Record<string, unknown> | undefined> {
-  try {
-    const raw = await readFile(mcxPaths(agentDir).settings, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-    return {};
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return {};
-    return undefined;
-  }
-}
-
 export async function seedMcxSettings(agentDir: string): Promise<void> {
-  const existing = await readSettingsObject(agentDir);
+  const existing = await readSettings(agentDir);
   if (!existing) return;
 
   const next: Record<string, unknown> = { ...existing };
@@ -87,21 +73,27 @@ export async function seedMcxSettings(agentDir: string): Promise<void> {
   }
 
   if (!changed) return;
-  await writeFile(mcxPaths(agentDir).settings, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await writeSettings(agentDir, next);
 }
 
-export async function installBundledSkill(agentDir: string, root = packageRoot()): Promise<boolean> {
-  const source = bundledSkillPath(root);
-  const dest = join(mcxPaths(agentDir).skills, "mcx", "SKILL.md");
+/** Seed a bundled file once. Never overwrite user edits. */
+async function seedOnce(dest: string, write: () => Promise<void>): Promise<boolean> {
   try {
     await readFile(dest);
     return false;
-  } catch {
-    // missing: install
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
   }
-  await mkdir(dirname(dest), { recursive: true });
-  await copyFile(source, dest);
+  await write();
   return true;
+}
+
+export async function installBundledSkill(agentDir: string, root = packageRoot()): Promise<boolean> {
+  const dest = join(mcxPaths(agentDir).skills, "mcx", "SKILL.md");
+  return seedOnce(dest, async () => {
+    await mkdir(dirname(dest), { recursive: true });
+    await copyFile(bundledSkillPath(root), dest);
+  });
 }
 
 export async function installBundledThemes(
@@ -122,26 +114,16 @@ export async function installBundledThemes(
   const installed: string[] = [];
   for (const name of names) {
     const dest = join(destDir, name);
-    try {
-      await readFile(dest);
-      continue;
-    } catch {
-      // missing: install
+    if (await seedOnce(dest, () => copyFile(join(sourceDir, name), dest))) {
+      installed.push(name);
     }
-    await copyFile(join(sourceDir, name), dest);
-    installed.push(name);
   }
   return installed;
 }
 
 export async function installBundledKeybindings(agentDir: string): Promise<boolean> {
   const dest = join(mcxPaths(agentDir).home, "keybindings.json");
-  try {
-    await readFile(dest);
-    return false;
-  } catch {
-    // missing: install
-  }
-  await writeFile(dest, `${JSON.stringify(pasteKeybindingsConfig(), null, 2)}\n`, "utf8");
-  return true;
+  return seedOnce(dest, () =>
+    writeFile(dest, `${JSON.stringify(pasteKeybindingsConfig(), null, 2)}\n`, "utf8"),
+  );
 }

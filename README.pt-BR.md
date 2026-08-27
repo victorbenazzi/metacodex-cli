@@ -38,7 +38,7 @@ O app desktop [metacodex](https://github.com/victorbenazzi) continua o shell. De
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 ```
 
-Isso baixa o repo, roda `pnpm install && pnpm build` e liga o `mcx` em `~/.local/bin/mcx`. Rode de novo para atualizar.
+Isso baixa o repo, roda `pnpm install && pnpm build` e liga o `mcx` em `~/.local/bin/mcx`. Depois disso, `mcx update` rebuilda a partir do `main` no GitHub. Binário antigo ainda precisa rodar o instalador uma vez.
 
 ```bash
 mcx --version    # mcx 0.0.1

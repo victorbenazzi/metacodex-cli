@@ -60,6 +60,13 @@ export const CURATED_PROVIDERS: readonly CuratedProvider[] = [
 
 const PI_IDS = new Set(CURATED_PROVIDERS.map((p) => p.piId));
 
+/** Grill table stays in DESIGN order. Pickers sort by label. */
+export function providersForUi(): CuratedProvider[] {
+  return [...CURATED_PROVIDERS].sort((a, b) =>
+    a.label.localeCompare(b.label, "en", { sensitivity: "base" }),
+  );
+}
+
 export function isCuratedPiProvider(piId: string): boolean {
   return PI_IDS.has(piId);
 }
@@ -103,4 +110,22 @@ export function storedCuratedPiIds(auth: unknown): string[] {
 /** Default model picker order after first login. */
 export function curatedPiIdOrder(): string[] {
   return CURATED_PROVIDERS.map((p) => p.piId);
+}
+
+/** `provider/id` from a picker row or spawn/handoff arg. */
+export function parseProviderModel(raw: string): { provider: string; id: string } | undefined {
+  const key = raw.trim().split(/\s+/u)[0];
+  if (!key) return undefined;
+  const slash = key.indexOf("/");
+  if (slash <= 0 || slash === key.length - 1) return undefined;
+  return { provider: key.slice(0, slash), id: key.slice(slash + 1) };
+}
+
+/** Prefer Pi scoped models when the session has them, then drop uncurated providers. */
+export function curatedSessionModels<T extends { provider: string }>(input: {
+  scoped: readonly { model: T }[];
+  available: readonly T[];
+}): T[] {
+  const pool = input.scoped.length > 0 ? input.scoped.map((scoped) => scoped.model) : [...input.available];
+  return curatedModelsOnly(pool);
 }

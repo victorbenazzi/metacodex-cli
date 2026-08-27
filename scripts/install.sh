@@ -164,4 +164,4 @@ fi
 "${BIN_DIR}/mcx" --version
 say "Installed. Run: mcx"
 say "Home is ~/.mcx (override with MCX_HOME)."
-say "Re-run this installer to update. --uninstall removes the app, not ~/.mcx."
+say "Later: mcx update. --uninstall removes the app, not ~/.mcx."

@@ -8,18 +8,6 @@ export function isVersionArg(argv: readonly string[]): boolean {
   return argv.includes("--version") || argv.includes("-V");
 }
 
-export function isEngineUpdateArg(argv: readonly string[]): boolean {
-  return argv[0] === "update";
-}
-
-export function mcxUpdateRejected(): string {
-  return [
-    "mcx pins the Pi engine. Do not run pi update from here.",
-    "When the engine moves, a new mcx version ships it.",
-    "",
-  ].join("\n");
-}
-
 export function mcxHelp(version = MCX_VERSION): string {
   return [
     `mcx ${version}`,
@@ -30,6 +18,7 @@ export function mcxHelp(version = MCX_VERSION): string {
     "  mcx                  Interactive session",
     "  mcx -p <prompt>      Print mode (one shot)",
     "  mcx --session <id>   Resume a session from ~/.mcx",
+    "  mcx update           Rebuild from GitHub (main). Does not touch ~/.mcx",
     "  mcx --version",
     "  mcx --help",
     "",
@@ -37,6 +26,8 @@ export function mcxHelp(version = MCX_VERSION): string {
     "",
     "In-session commands:",
     "  /auth       Connect a curated provider, or edit the fallback chain",
+    "  /clear      Start a new session. Same as /new",
+    "  /effort     Set this session's thinking effort",
     "  /handoff    Hand off this session to another curated model",
     "  /model      Switch model. Cross-provider also injects a handoff packet",
     "",

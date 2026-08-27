@@ -93,7 +93,7 @@ describe("login method options", () => {
       },
     };
 
-    registerAuthCommand(pi as unknown as ExtensionAPI);
+    registerAuthCommand(pi as unknown as ExtensionAPI, { agentDir: "" });
     expect(commands.has("auth")).toBe(true);
     for (const handler of handlers.get("session_start") ?? []) {
       handler({}, ctx as unknown as ExtensionContext);

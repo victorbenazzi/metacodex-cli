@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { hideUncuratedCatalog } from "./catalog-runtime.js";
 import { ensureMcxHome } from "./home.js";
 import {
   installBundledKeybindings,
@@ -8,9 +7,10 @@ import {
   installBundledThemes,
   seedMcxSettings,
 } from "./bootstrap.js";
-import { isEngineUpdateArg, isHelpArg, isVersionArg, mcxHelp, mcxUpdateRejected } from "./help.js";
-import { installResumeHintRewrite } from "./resume.js";
-import { hushSkillStartupDump } from "./skills/diagnostics.js";
+import { installEngineShims } from "./engine/install.js";
+import { installResumeHintRewrite } from "./engine/resume.js";
+import { isHelpArg, isVersionArg, mcxHelp } from "./help.js";
+import { isUpdateArg, mcxUpdateFailed, runMcxUpdate } from "./update.js";
 import { MCX_VERSION, PI_AGENT_DIR_ENV, pinEngineUpdates } from "./version.js";
 
 async function main(): Promise<void> {
@@ -23,8 +23,13 @@ async function main(): Promise<void> {
     process.stdout.write(mcxHelp());
     return;
   }
-  if (isEngineUpdateArg(argv)) {
-    process.stdout.write(mcxUpdateRejected());
+  if (isUpdateArg(argv)) {
+    try {
+      process.exitCode = await runMcxUpdate();
+    } catch (error: unknown) {
+      process.stderr.write(mcxUpdateFailed(error));
+      process.exitCode = 1;
+    }
     return;
   }
 
@@ -32,19 +37,20 @@ async function main(): Promise<void> {
   process.env[PI_AGENT_DIR_ENV] = agentDir;
   pinEngineUpdates();
   installResumeHintRewrite();
-  await seedMcxSettings(agentDir);
-  await installBundledSkill(agentDir);
-  await installBundledThemes(agentDir);
-  await installBundledKeybindings(agentDir);
+  await Promise.all([
+    seedMcxSettings(agentDir),
+    installBundledSkill(agentDir),
+    installBundledThemes(agentDir),
+    installBundledKeybindings(agentDir),
+  ]);
 
   const { DefaultResourceLoader, ModelRuntime, main: piMain } = await import(
     "@earendil-works/pi-coding-agent"
   );
-  hushSkillStartupDump(DefaultResourceLoader);
-  hideUncuratedCatalog(ModelRuntime);
+  installEngineShims(DefaultResourceLoader, ModelRuntime);
   const { createMcxExtension } = await import("./extensions/mcx.js");
   await piMain(argv, {
-    extensionFactories: [createMcxExtension()],
+    extensionFactories: [createMcxExtension(agentDir)],
   });
 }
 
