@@ -18,7 +18,7 @@ export function mcxHelp(version = MCX_VERSION): string {
     "  mcx                  Interactive session",
     "  mcx -p <prompt>      Print mode (one shot)",
     "  mcx --session <id>   Resume a session from ~/.mcx",
-    "  mcx update           Rebuild from GitHub (main). Does not touch ~/.mcx",
+    "  mcx update           Install latest GitHub release. Does not touch ~/.mcx",
     "  mcx --version",
     "  mcx --help",
     "",

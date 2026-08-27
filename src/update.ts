@@ -1,5 +1,10 @@
 import { spawn } from "node:child_process";
 
+/**
+ * Bootstrap installer. Always fetched from main so old binaries get current
+ * install.sh. The source that script builds defaults to the latest GitHub
+ * release tag (install.sh), not the tip of main. Pass MCX_REF to pin.
+ */
 export const INSTALL_SCRIPT_URL =
   "https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh";
 
@@ -34,7 +39,7 @@ export function mcxUpdateFailed(error: unknown): string {
   ].join("\n");
 }
 
-/** Re-run the GitHub installer. Same path as first install. Does not touch ~/.mcx. */
+/** Re-run the GitHub installer (latest release unless MCX_REF is set). Does not touch ~/.mcx. */
 export function runMcxUpdate(
   env: NodeJS.ProcessEnv = process.env,
   spawnFn: UpdateSpawn = spawn,

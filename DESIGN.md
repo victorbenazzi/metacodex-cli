@@ -142,9 +142,9 @@ RPC, ACP, SDK no webview: não no v1. O Agent view não volta.
 | Idioma TUI | Inglês no v1. pt-BR depois. |
 | Tema | Tema `metacodex` no pi-tui quando for barato. Não bloqueia o roteador. |
 | Print | `mcx -p` (Pi print mode). |
-| Update | `mcx update` re-roda o instalador (GitHub `main`). Não é `pi update`. Não toca `~/.mcx`. |
+| Update | `mcx update` instala a última tag/release (`vX.Y.Z`). Não é `pi update`. Não toca `~/.mcx`. Main continua o trunk; canal de quem já tem o binário é a tag. |
 | RPC | Existe no motor. Não é produto no v1. |
-| Windows | Sim. |
+| Windows | Git Bash ou WSL. Sem instalador Win32 no v1. |
 | Testes | Vitest no roteador: classify, strip, pacote de handoff, brief, cap de filhos, catálogo. |
 | Gateway | Não. |
 | Plan mode | Não. |

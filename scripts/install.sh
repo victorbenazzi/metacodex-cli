@@ -5,8 +5,11 @@
 #   curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 #   curl -fsSL ... | bash -s -- --uninstall
 #
+# The script is always fetched from main (current install logic). The source it
+# builds defaults to the latest GitHub release tag, not the tip of main.
+#
 # Optional env:
-#   MCX_REF          git ref (default: main)
+#   MCX_REF          git ref (default: latest GitHub release). Trunk: MCX_REF=main
 #   MCX_INSTALL_DIR  checkout (default: ~/.local/share/metacodex-cli)
 #   MCX_BIN_DIR      symlink dir (default: ~/.local/bin)
 #   MCX_FROM_DIR     install from a local checkout instead of GitHub
@@ -14,7 +17,6 @@
 set -euo pipefail
 
 REPO="victorbenazzi/metacodex-cli"
-REF="${MCX_REF:-main}"
 INSTALL_DIR="${MCX_INSTALL_DIR:-${HOME}/.local/share/metacodex-cli}"
 BIN_DIR="${MCX_BIN_DIR:-${HOME}/.local/bin}"
 MIN_NODE="22.19.0"
@@ -60,6 +62,39 @@ ensure_pnpm() {
   fi
   err "need pnpm. Install pnpm, or Node with corepack, then rerun."
   exit 1
+}
+
+latest_release_tag() {
+  local json tag
+  if ! json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"; then
+    err "could not read latest GitHub release for ${REPO}."
+    err "Set MCX_REF=main to install trunk, or MCX_REF=vX.Y.Z to pin a tag."
+    exit 1
+  fi
+  if ! tag="$(printf '%s' "${json}" | node -e '
+    const fs = require("fs");
+    try {
+      const data = JSON.parse(fs.readFileSync(0, "utf8"));
+      if (typeof data.tag_name !== "string" || data.tag_name.length === 0) process.exit(1);
+      process.stdout.write(data.tag_name);
+    } catch {
+      process.exit(1);
+    }
+  ')"; then
+    err "no GitHub release found for ${REPO}."
+    err "Set MCX_REF=main to install trunk, or wait for a v* tag."
+    exit 1
+  fi
+  printf '%s\n' "${tag}"
+}
+
+resolve_ref() {
+  if [[ -n "${MCX_REF:-}" ]]; then
+    printf '%s\n' "${MCX_REF}"
+    return
+  fi
+  say "Resolving latest GitHub release..."
+  latest_release_tag
 }
 
 uninstall() {
@@ -112,6 +147,7 @@ if [[ -n "${MCX_FROM_DIR:-}" ]]; then
     --exclude dist \
     -cf - . | tar -C "${INSTALL_DIR}" -xf -
 else
+  REF="$(resolve_ref)"
   ARCHIVE="https://codeload.github.com/${REPO}/tar.gz/${REF}"
   say "Downloading ${REPO}@${REF}..."
   curl -fsSL "${ARCHIVE}" -o "${TMP}/src.tar.gz"
@@ -164,4 +200,4 @@ fi
 "${BIN_DIR}/mcx" --version
 say "Installed. Run: mcx"
 say "Home is ~/.mcx (override with MCX_HOME)."
-say "Later: mcx update. --uninstall removes the app, not ~/.mcx."
+say "Later: mcx update (latest GitHub release). --uninstall removes the app, not ~/.mcx."

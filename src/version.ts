@@ -1,3 +1,9 @@
+/**
+ * Product version. Source of truth for `mcx --version` and GitHub tags (`v` + this string).
+ * Ritual: bump this (keep package.json version in lockstep) in a PR, merge, tag `v0.0.x`,
+ * push the tag. The tag workflow publishes a GitHub Release. CI does not bump.
+ * The tag must match this string. Not npm.
+ */
 export const MCX_VERSION = "0.0.1";
 export const MCX_BIN = "mcx";
 export const MCX_PRODUCT = "metacodex-cli";

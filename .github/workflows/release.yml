@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches MCX_VERSION
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^export const MCX_VERSION = "\(.*\)";$/\1/p' src/version.ts)"
+          if [[ -z "${version}" ]]; then
+            echo "could not read MCX_VERSION from src/version.ts"
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "tag ${GITHUB_REF_NAME} must be v${version} (src/version.ts)"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" --generate-notes

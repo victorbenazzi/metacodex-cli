@@ -38,7 +38,7 @@ O app desktop [metacodex](https://github.com/victorbenazzi) continua o shell. De
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 ```
 
-Isso baixa o repo, roda `pnpm install && pnpm build` e liga o `mcx` em `~/.local/bin/mcx`. Depois disso, `mcx update` rebuilda a partir do `main` no GitHub. Binário antigo ainda precisa rodar o instalador uma vez.
+Isso puxa o `install.sh` atual do `main` e baixa a **última GitHub Release** (tag `vX.Y.Z`), roda `pnpm install && pnpm build` e liga o `mcx` em `~/.local/bin/mcx`. Não a ponta do `main`.
 
 ```bash
 mcx --version    # mcx 0.0.1
@@ -57,10 +57,11 @@ Desinstalar (mantém `~/.mcx`: auth, sessões, settings):
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash -s -- --uninstall
 ```
 
-Travar um ref com `MCX_REF` (branch, tag ou commit):
+Para trunk ou um pin, defina `MCX_REF` (branch, tag ou commit):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=main bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=v0.0.1 bash
 ```
 
 ### Instalar de um clone
@@ -75,6 +76,20 @@ ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
 ```
 
 A home padrão é `~/.mcx`. Override: `MCX_HOME`.
+
+## Atualizar
+
+```bash
+mcx update
+```
+
+Igual o instalador: instala a última GitHub Release (tag `vX.Y.Z`), rebuilda e religa `~/.local/bin/mcx`. Não mexe em `~/.mcx` (auth, sessões, settings). Não é `pi update`. Main continua o trunk; o canal de quem já tem o binário é a tag.
+
+Não rode `pi update`. O motor do Pi fica pinado. Quando o motor andar, uma versão nova do `mcx` leva ele.
+
+Se o `mcx update` ainda disser que o motor está pinado, esse binário é antigo. Rode o instalador uma vez. Depois disso, o caminho é `mcx update`.
+
+Instalou de um clone? Continue com `git pull && pnpm install && pnpm build`. O `mcx update` troca o symlink pela cópia do GitHub.
 
 ## Primeiro uso
 
@@ -203,6 +218,17 @@ pnpm build
 ```
 
 O contrato do v1 está em [DESIGN.md](./DESIGN.md). Código que divergir disto está errado.
+
+## Release
+
+`MCX_VERSION` em `src/version.ts` é a fonte. O CI não faz bump.
+
+1. Bump de `MCX_VERSION` (mantenha `package.json` no mesmo número) num PR.
+2. Merge.
+3. Tag `v0.0.x` batendo com essa string e push da tag.
+4. O workflow da tag publica uma GitHub Release. Não é npm. Não é binário nativo.
+
+`mcx update` e o instalador (sem `MCX_REF`) instalam essa última release.
 
 ## Licença
 

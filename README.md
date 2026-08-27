@@ -38,7 +38,7 @@ The [metacodex](https://github.com/victorbenazzi) desktop app stays the shell. L
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash
 ```
 
-That downloads this repo, runs `pnpm install && pnpm build`, and links `mcx` to `~/.local/bin/mcx`. After that, `mcx update` rebuilds from GitHub `main`. An older binary still needs one installer run first.
+That fetches current `install.sh` from `main`, then downloads the **latest GitHub release** (tag `vX.Y.Z`), runs `pnpm install && pnpm build`, and links `mcx` to `~/.local/bin/mcx`. Not the tip of `main`.
 
 ```bash
 mcx --version    # mcx 0.0.1
@@ -57,10 +57,11 @@ Uninstall (keeps `~/.mcx`: auth, sessions, settings):
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | bash -s -- --uninstall
 ```
 
-Pin a ref with `MCX_REF` (branch, tag, or commit):
+To install trunk or pin a ref, set `MCX_REF` (branch, tag, or commit):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=main bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=v0.0.1 bash
 ```
 
 ### Install from a clone
@@ -75,6 +76,20 @@ ln -sfn "$(pwd)/dist/cli.js" ~/.local/bin/mcx
 ```
 
 Override the home directory with `MCX_HOME`. Default is `~/.mcx`.
+
+## Update
+
+```bash
+mcx update
+```
+
+Same as the installer: installs the latest GitHub release (tag `vX.Y.Z`), rebuilds, relinks `~/.local/bin/mcx`. Does not touch `~/.mcx` (auth, sessions, settings). Not `pi update`. Main stays the trunk; the channel for an installed binary is the tag.
+
+Do not run `pi update`. The Pi engine is pinned. When the engine moves, a new `mcx` version ships it.
+
+If `mcx update` still says the engine is pinned, this binary predates the command. Run the installer once. After that, `mcx update` is the path.
+
+Installed from a clone? Stay on `git pull && pnpm install && pnpm build`. `mcx update` replaces the symlink with the GitHub install.
 
 ## First run
 
@@ -203,6 +218,17 @@ pnpm build
 ```
 
 The v1 contract is [DESIGN.md](./DESIGN.md) (Portuguese). Code that disagrees with it is wrong.
+
+## Release
+
+`MCX_VERSION` in `src/version.ts` is the source of truth. CI does not bump it.
+
+1. Bump `MCX_VERSION` (keep `package.json` version in lockstep) in a PR.
+2. Merge.
+3. Tag `v0.0.x` matching that string and push the tag.
+4. The tag workflow publishes a GitHub Release. Not npm. Not a native binary.
+
+`mcx update` and the installer (no `MCX_REF`) install that latest release.
 
 ## License
 

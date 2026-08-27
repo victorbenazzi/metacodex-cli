@@ -19,6 +19,9 @@ describe("mcx help", () => {
     expect(text).toContain("/handoff");
     expect(text).toContain("mcx --session");
     expect(text).toContain("mcx update");
+    expect(text).toContain("latest GitHub release");
+    expect(text).not.toContain("GitHub main");
+    expect(text).not.toContain("Rebuild from GitHub main");
     expect(text).not.toMatch(/\bpi \[options\]/i);
   });
 });
