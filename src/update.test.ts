@@ -29,12 +29,12 @@ describe("mcxUpdateEnv", () => {
 describe("runMcxUpdate", () => {
   it("runs bash that curls the installer and keeps MCX_REF", async () => {
     const calls: { command: string; args: string[]; env: NodeJS.ProcessEnv }[] = [];
-    const spawnFn: UpdateSpawn = ((command, args, options) => {
-      calls.push({ command, args: [...args], env: options.env ?? {} });
+    const spawnFn: UpdateSpawn = (command, args, options) => {
+      calls.push({ command, args: [...args], env: options.env });
       const child = new EventEmitter();
       queueMicrotask(() => child.emit("close", 0));
-      return child as unknown as ReturnType<UpdateSpawn>;
-    }) as UpdateSpawn;
+      return child;
+    };
 
     const code = await runMcxUpdate({ PATH: "/bin", MCX_REF: "main" }, spawnFn);
     expect(code).toBe(0);

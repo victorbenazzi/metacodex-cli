@@ -3,7 +3,16 @@ import { spawn } from "node:child_process";
 export const INSTALL_SCRIPT_URL =
   "https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh";
 
-export type UpdateSpawn = typeof spawn;
+export type UpdateChild = {
+  on(event: "error", listener: (error: Error) => void): unknown;
+  on(event: "close", listener: (code: number | null) => void): unknown;
+};
+
+export type UpdateSpawn = (
+  command: string,
+  args: readonly string[],
+  options: { stdio: "inherit"; env: NodeJS.ProcessEnv },
+) => UpdateChild;
 
 export function isUpdateArg(argv: readonly string[]): boolean {
   return argv[0] === "update";

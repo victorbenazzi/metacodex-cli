@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { registerClear, runClearCommand } from "./clear.js";
 
+type NotifyKind = "error" | "info" | "warning";
+
 type CommandSpec = {
   description?: string;
   handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
@@ -9,21 +11,23 @@ type CommandSpec = {
 
 function createHarness(options?: { cancelled?: boolean }) {
   const commands = new Map<string, CommandSpec>();
-  const notices: { message: string; type?: string }[] = [];
+  const notices: { message: string; type?: NotifyKind }[] = [];
   const newSessionCalls: unknown[] = [];
 
-  const ctx = {
-    ui: {
-      notify(message: string, type?: string) {
-        notices.push(type === undefined ? { message } : { message, type });
-      },
+  const ui = {
+    notify(message: string, type?: NotifyKind) {
+      notices.push(type === undefined ? { message } : { message, type });
     },
+  };
+
+  const ctx = {
+    ui,
     async newSession(opts?: {
-      withSession?: (next: { ui: { notify: (message: string, type?: string) => void } }) => Promise<void>;
+      withSession?: (next: { ui: typeof ui }) => Promise<void>;
     }) {
       newSessionCalls.push(opts);
       if (options?.cancelled) return { cancelled: true };
-      await opts?.withSession?.(ctx);
+      await opts?.withSession?.({ ui });
       return { cancelled: false };
     },
   } as unknown as ExtensionCommandContext;
