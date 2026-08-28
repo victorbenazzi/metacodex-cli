@@ -93,7 +93,8 @@ resolve_ref() {
     printf '%s\n' "${MCX_REF}"
     return
   fi
-  say "Resolving latest GitHub release..."
+  # stderr: this function's stdout is captured into REF for the tarball URL.
+  say "Resolving latest GitHub release..." >&2
   latest_release_tag
 }
 
@@ -148,6 +149,12 @@ if [[ -n "${MCX_FROM_DIR:-}" ]]; then
     -cf - . | tar -C "${INSTALL_DIR}" -xf -
 else
   REF="$(resolve_ref)"
+  # A leaked status line on stdout used to become a newline in the URL
+  # (curl: (3) URL rejected). Keep the path a single token.
+  if [[ -z "${REF}" || "${REF}" == *$'\n'* || "${REF}" == *$'\r'* || "${REF}" == *' '* ]]; then
+    err "ref must be a single token, got: ${REF}"
+    exit 1
+  fi
   ARCHIVE="https://codeload.github.com/${REPO}/tar.gz/${REF}"
   say "Downloading ${REPO}@${REF}..."
   curl -fsSL "${ARCHIVE}" -o "${TMP}/src.tar.gz"

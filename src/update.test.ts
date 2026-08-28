@@ -92,4 +92,9 @@ describe("install.sh", () => {
     expect(script).toContain("latest_release_tag");
     expect(script).toContain("MCX_REF=main");
   });
+
+  it("does not capture the release-resolving status into the tarball URL", () => {
+    expect(script).toContain('say "Resolving latest GitHub release..." >&2');
+    expect(script).toContain('[[ -z "${REF}" || "${REF}" == *$\'\\n\'*');
+  });
 });
