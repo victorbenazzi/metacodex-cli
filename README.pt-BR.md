@@ -147,7 +147,9 @@ Na mesma tela: conectar, trocar método, sair, editar a chain de fallback.
 |---|---|
 | `/auth` | Conecta um provider curado, ou edita a chain de fallback. |
 | `/handoff` | Escolhe outro modelo conectado, instrução opcional. Sempre injeta o pacote e dispara o turno. |
+| `/mcp` | Lista e gerencia servers MCP. Um proxy tool; servers ficam lazy. |
 | `/model` | Troca de modelo. Mesma família: só troca. Outro provider: pacote, sem passo de instrução, sem turno automático. |
+| `/plan` | Liga/desliga plan mode (Shift+Tab também). Só leitura até você desligar. |
 
 `spawn` é tool do agente pai. Não é slash command.
 
@@ -194,12 +196,23 @@ O pai carrega a união de:
 
 O filho só leva as skills nomeadas em `spawn.skills`.
 
+## Plan mode (`/plan`)
+
+`/plan` ou Shift+Tab liga um permission-mode de leitura na sessão pai. O footer mostra `plan`.
+
+Passa: `read`, `grep`, `find`, `ls`, e bash claramente read-only (`ls`, `rg`, `git status`, `git log`). Recusa: `write`, `edit`, `spawn`, bash que muta, e outras tools (incluindo o proxy MCP). `/plan off` ou o mesmo toggle sai. Estado é só memória. Sessão nova ou resumed começa com plan off. Thinking cycle fica no `/effort`; Shift+Tab é plan.
+
+## MCP (`/mcp`)
+
+A sessão pai carrega `pi-mcp-adapter` como dependência npm (não `pi install`, não copia para `~/.mcx/extensions`). O modelo vê um proxy tool (~200 tokens), não o catálogo inteiro de MCP. `/mcp` lista e gerencia servers. A config global efetiva é `~/.mcx/mcp.json` porque `PI_CODING_AGENT_DIR` é `~/.mcx`. O adapter também pode ler `.mcp.json` do projeto e arquivos compartilhados (`~/.config/mcp/mcp.json`, `~/.agents/mcp.json`). Writes ficam em `~/.mcx` ou `.pi/mcp.json` do projeto se o adapter já faz isso. Filho do spawn não leva MCP.
+
 ## Disco
 
 ```text
 ~/.mcx/                 # ou $MCX_HOME
   auth.json
   settings.json         # theme, fallback.chain, enabledModels
+  mcp.json              # override global do adapter MCP (não ~/.pi)
   sessions/
     subagents/
   skills/

@@ -147,7 +147,9 @@ Same screen: connect, change method, log out, edit the fallback chain.
 |---|---|
 | `/auth` | Connect a curated provider, or edit the fallback chain. |
 | `/handoff` | Pick another connected model, optional instruction. Always injects a handoff packet, then starts a turn. |
+| `/mcp` | List and manage MCP servers. One proxy tool; servers stay lazy. |
 | `/model` | Switch model. Same family: just switch. Other provider: packet, no instruction prompt, no auto-turn. |
+| `/plan` | Toggle plan mode (Shift+Tab too). Read-only until you turn it off. |
 
 `spawn` is a tool the parent agent calls. It is not a slash command.
 
@@ -194,12 +196,23 @@ Parent loads the union of:
 
 A child only gets skills named in `spawn.skills`.
 
+## Plan mode (`/plan`)
+
+`/plan` or Shift+Tab toggles a read-only permission mode on the parent session. Footer shows `plan`.
+
+Allowed: `read`, `grep`, `find`, `ls`, and bash that is clearly read-only (`ls`, `rg`, `git status`, `git log`). Blocked: `write`, `edit`, `spawn`, mutating bash, and other tools (including the MCP proxy). `/plan off` or the same toggle leaves the mode. State is in-memory. A new or resumed session starts with plan off. Thinking cycle stays on `/effort`; Shift+Tab is plan.
+
+## MCP (`/mcp`)
+
+The parent session loads `pi-mcp-adapter` as an npm dependency (not `pi install`, not copied into `~/.mcx/extensions`). The model sees one proxy tool (~200 tokens), not the full MCP catalog. `/mcp` lists and manages servers. Effective global config is `~/.mcx/mcp.json` because `PI_CODING_AGENT_DIR` is `~/.mcx`. The adapter may also read project `.mcp.json` and shared files (`~/.config/mcp/mcp.json`, `~/.agents/mcp.json`). Writes stay in `~/.mcx` or project `.pi/mcp.json` if the adapter already does that. Child sessions do not get MCP.
+
 ## Config on disk
 
 ```text
 ~/.mcx/                 # or $MCX_HOME
   auth.json
   settings.json         # theme, fallback.chain, enabledModels
+  mcp.json              # MCP adapter global override (not ~/.pi)
   sessions/
     subagents/
   skills/

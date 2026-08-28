@@ -7,6 +7,7 @@ import {
   SessionManager,
   type ExtensionAPI,
   type ExtensionContext,
+  type InlineExtension,
 } from "@earendil-works/pi-coding-agent";
 import { curatedSessionModels } from "../catalog.js";
 import { loadFallbackSettings } from "../settings.js";
@@ -14,6 +15,8 @@ import { mcxPaths } from "../home.js";
 import { oscAttention } from "../osc.js";
 import { extraSkillPaths } from "../skills/discovery.js";
 import type { OscWrite } from "./osc.js";
+import { registerFallback } from "./fallback.js";
+import { formatChainExhaustedReport } from "../router/fallback.js";
 import {
   CHILD_SYSTEM_PROMPT,
   CHILD_TIMEOUT_MS,
@@ -29,6 +32,34 @@ import {
 } from "../router/subagent.js";
 
 export const SPAWN_REPORT_CUSTOM_TYPE = "mcx-spawn-report";
+
+/** Same hop policy as the parent, without spawn, /auth, or TUI. */
+export function createChildFallbackExtension(
+  agentDir: string,
+  onExhausted?: () => void,
+): InlineExtension {
+  return {
+    name: "mcx-child-fallback",
+    factory: (pi: ExtensionAPI) => {
+      registerFallback(pi, {
+        agentDir,
+        onAttention: (kind) => {
+          if (kind === "exhausted") onExhausted?.();
+        },
+      });
+    },
+  };
+}
+
+function lastAssistantError(messages: readonly { role: string; stopReason?: string; errorMessage?: string }[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message?.role !== "assistant") continue;
+    if (message.stopReason !== "error") return undefined;
+    return message.errorMessage ?? "";
+  }
+  return undefined;
+}
 
 export interface ChildRunRequest {
   description: string;
@@ -105,6 +136,7 @@ export async function runChildSession(
 
   const skills = [...request.skills];
   const extraSkills = extraSkillPaths(request.cwd, homedir(), agentDir);
+  let chainExhausted = false;
   const loader = new DefaultResourceLoader({
     cwd: request.cwd,
     agentDir,
@@ -114,6 +146,11 @@ export async function runChildSession(
     noThemes: true,
     noContextFiles: true,
     systemPrompt: CHILD_SYSTEM_PROMPT,
+    extensionFactories: [
+      createChildFallbackExtension(agentDir, () => {
+        chainExhausted = true;
+      }),
+    ],
     ...(extraSkills.length > 0 ? { additionalSkillPaths: extraSkills } : {}),
     skillsOverride: (base) => ({
       skills: skills.length === 0 ? [] : base.skills.filter((skill) => skills.includes(skill.name)),
@@ -162,11 +199,15 @@ export async function runChildSession(
     if (request.signal.aborted) {
       return { ok: false, report: "spawn aborted" };
     }
+    const hopError = lastAssistantError(session.messages);
+    if (hopError !== undefined) {
+      return { ok: false, report: formatChainExhaustedReport(hopError, chainExhausted) };
+    }
     return { ok: true, report: extractChildReport(session.messages) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (request.signal.aborted) return { ok: false, report: "spawn aborted" };
-    return { ok: false, report: message };
+    return { ok: false, report: formatChainExhaustedReport(message, chainExhausted) };
   } finally {
     request.signal.removeEventListener("abort", abortSession);
     unsubscribe();

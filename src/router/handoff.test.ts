@@ -100,6 +100,45 @@ describe("deriveHandoffFields", () => {
     expect(fields.doNotRedo).toContain("src-tauri/src/util/paths.rs");
   });
 
+  it("cites clipped tool results in alreadyDone, not only edit path", () => {
+    const fields = deriveHandoffFields(
+      [
+        { role: "user", content: "add the grant check" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              name: "edit",
+              arguments: { path: "src-tauri/src/util/paths.rs" },
+            },
+          ],
+        },
+        {
+          role: "toolResult",
+          toolName: "edit",
+          content: "grant check is now in paths.rs and the hop test is green",
+        },
+      ],
+    );
+    expect(fields.alreadyDone).toContain("edit src-tauri/src/util/paths.rs");
+    expect(fields.alreadyDone).toContain("result (edit):");
+    expect(fields.alreadyDone).toContain("grant check is now in paths.rs");
+    const packet = buildHandoffPacket({
+      fromProvider: "anthropic",
+      fromModel: "opus",
+      toProvider: "deepseek",
+      toModel: "deepseek-chat",
+      inProgress: fields.inProgress,
+      alreadyDone: fields.alreadyDone,
+      doNotRedo: fields.doNotRedo,
+      userInstruction: "finish the tests only",
+    });
+    expect(packet).toContain("grant check is now in paths.rs");
+    expect(packet).toContain("User instruction for this handoff:");
+    expect(packet).toContain("finish the tests only");
+  });
+
   it("stays specified-empty when the transcript has no user turn yet", () => {
     expect(deriveHandoffFields([])).toEqual({
       inProgress: "(not specified)",

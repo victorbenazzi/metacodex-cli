@@ -17,6 +17,8 @@ describe("mcx help", () => {
     expect(text).toContain("/clear");
     expect(text).toContain("/effort");
     expect(text).toContain("/handoff");
+    expect(text).toContain("/mcp");
+    expect(text).toContain("/plan");
     expect(text).toContain("mcx --session");
     expect(text).toContain("mcx update");
     expect(text).toContain("latest GitHub release");

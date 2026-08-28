@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pasteKeybindingsConfig } from "./paste-keys.js";
+import { bundledKeybindingsConfig, pasteKeybindingsConfig, THINKING_CYCLE_KEYBINDING } from "./paste-keys.js";
 
 describe("pasteKeybindingsConfig", () => {
   it("uses Command and Ctrl on macOS, Alt on Windows, Ctrl on Linux", () => {
@@ -12,5 +12,13 @@ describe("pasteKeybindingsConfig", () => {
     expect(pasteKeybindingsConfig("linux")).toEqual({
       "app.clipboard.pasteImage": ["ctrl+v"],
     });
+  });
+});
+
+describe("bundledKeybindingsConfig", () => {
+  it("keeps paste keys and frees Shift+Tab from thinking cycle", () => {
+    const bundled = bundledKeybindingsConfig("darwin");
+    expect(bundled["app.clipboard.pasteImage"]).toEqual(["ctrl+v", "super+v"]);
+    expect(bundled[THINKING_CYCLE_KEYBINDING]).toEqual([]);
   });
 });

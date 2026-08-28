@@ -11,7 +11,7 @@ import {
   packageRoot,
   seedMcxSettings,
 } from "./bootstrap.js";
-import { pasteKeybindingsConfig } from "./extensions/paste-keys.js";
+import { bundledKeybindingsConfig, pasteKeybindingsConfig, THINKING_CYCLE_KEYBINDING } from "./extensions/paste-keys.js";
 import { enabledModelPatternsForPiIds } from "./catalog.js";
 
 describe("seedMcxSettings", () => {
@@ -130,16 +130,27 @@ describe("installBundledThemes", () => {
 });
 
 describe("installBundledKeybindings", () => {
-  it("writes paste keys once and leaves user edits alone", async () => {
+  it("writes paste keys and unbinds thinking cycle once, and leaves user edits alone", async () => {
     const home = await mkdtemp(join(tmpdir(), "mcx-keys-"));
     const first = await installBundledKeybindings(home);
     const second = await installBundledKeybindings(home);
     expect(first).toBe(true);
     expect(second).toBe(false);
     const dest = join(home, "keybindings.json");
-    expect(JSON.parse(await readFile(dest, "utf8"))).toEqual(pasteKeybindingsConfig());
+    expect(JSON.parse(await readFile(dest, "utf8"))).toEqual(bundledKeybindingsConfig());
     await writeFile(dest, "user edit\n");
     await installBundledKeybindings(home);
     expect(await readFile(dest, "utf8")).toBe("user edit\n");
+  });
+
+  it("unbinds thinking cycle on existing paste-only keybindings", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-keys-plan-"));
+    const dest = join(home, "keybindings.json");
+    await writeFile(dest, `${JSON.stringify(pasteKeybindingsConfig(), null, 2)}\n`);
+    const patched = await installBundledKeybindings(home);
+    expect(patched).toBe(true);
+    const raw = JSON.parse(await readFile(dest, "utf8")) as Record<string, unknown>;
+    expect(raw[THINKING_CYCLE_KEYBINDING]).toEqual([]);
+    expect(raw["app.clipboard.pasteImage"]).toEqual(pasteKeybindingsConfig()["app.clipboard.pasteImage"]);
   });
 });

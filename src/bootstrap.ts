@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_THEME_SETTING } from "./brand/mark.js";
 import { enabledModelPatternsForPiIds, storedCuratedPiIds } from "./catalog.js";
-import { pasteKeybindingsConfig } from "./extensions/paste-keys.js";
+import { bundledKeybindingsConfig, THINKING_CYCLE_KEYBINDING } from "./extensions/paste-keys.js";
 import { mcxPaths } from "./home.js";
 import { readSettings, writeSettings } from "./settings.js";
 
@@ -123,7 +123,24 @@ export async function installBundledThemes(
 
 export async function installBundledKeybindings(agentDir: string): Promise<boolean> {
   const dest = join(mcxPaths(agentDir).home, "keybindings.json");
-  return seedOnce(dest, () =>
-    writeFile(dest, `${JSON.stringify(pasteKeybindingsConfig(), null, 2)}\n`, "utf8"),
+  const seeded = await seedOnce(dest, () =>
+    writeFile(dest, `${JSON.stringify(bundledKeybindingsConfig(), null, 2)}\n`, "utf8"),
   );
+  if (seeded) return true;
+  return unbindThinkingCycleIfMissing(dest);
+}
+
+async function unbindThinkingCycleIfMissing(dest: string): Promise<boolean> {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(dest, "utf8"));
+  } catch {
+    return false;
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const rec = raw as Record<string, unknown>;
+  if (THINKING_CYCLE_KEYBINDING in rec) return false;
+  rec[THINKING_CYCLE_KEYBINDING] = [];
+  await writeFile(dest, `${JSON.stringify(rec, null, 2)}\n`, "utf8");
+  return true;
 }

@@ -5,6 +5,8 @@ export const HANDOFF_CUSTOM_TYPE = "mcx-handoff";
 const UNSPECIFIED = "(not specified)";
 const SEE_DONE = "(see already done)";
 const IN_PROGRESS_MAX = 2000;
+const TOOL_RESULT_CLIP = 400;
+const TOOL_RESULT_N = 8;
 
 export interface HandoffPacketInput {
   fromProvider: string;
@@ -27,6 +29,7 @@ export interface HandoffContentBlock {
 export interface HandoffSourceMessage {
   role: string;
   content?: string | HandoffContentBlock[];
+  toolName?: string;
 }
 
 export function isCrossProvider(fromProvider: string, toProvider: string): boolean {
@@ -96,43 +99,64 @@ function pathFromArgs(args: Record<string, unknown> | undefined): string | undef
   return undefined;
 }
 
-function collectToolWork(messages: readonly HandoffSourceMessage[]): { done: string[]; paths: string[] } {
+function collectTranscriptWork(messages: readonly HandoffSourceMessage[]): {
+  done: string[];
+  paths: string[];
+  results: string[];
+} {
   const done: string[] = [];
   const paths: string[] = [];
+  const results: string[] = [];
   const seen = new Set<string>();
 
-  const push = (line: string): void => {
+  const pushDone = (line: string): void => {
     if (seen.has(line)) return;
     seen.add(line);
     done.push(line);
   };
 
+  const pushResult = (name: string, text: string): void => {
+    const clipped = clip(text, TOOL_RESULT_CLIP);
+    if (!clipped) return;
+    results.push(`result (${name.trim() || "tool"}): ${clipped}`);
+  };
+
   for (const message of messages) {
+    if (message.role === "toolResult") {
+      const text = contentText(message.content);
+      if (text) pushResult(message.toolName ?? "tool", text);
+      continue;
+    }
     if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
     for (const block of message.content) {
-      if (block.type !== "toolCall" && block.type !== "toolUse") continue;
-      const name = block.name?.trim() || "tool";
-      const path = pathFromArgs(block.arguments);
-      if (path) {
-        paths.push(path);
-        push(`${name} ${path}`);
+      if (block.type === "toolCall" || block.type === "toolUse") {
+        const name = block.name?.trim() || "tool";
+        const path = pathFromArgs(block.arguments);
+        if (path) {
+          paths.push(path);
+          pushDone(`${name} ${path}`);
+          continue;
+        }
+        if (name === "bash" && typeof block.arguments?.command === "string") {
+          pushDone(`bash ${clip(block.arguments.command, 80)}`);
+          continue;
+        }
+        pushDone(name);
         continue;
       }
-      if (name === "bash" && typeof block.arguments?.command === "string") {
-        push(`bash ${clip(block.arguments.command, 80)}`);
-        continue;
+      if (block.type === "toolResult" && typeof block.text === "string" && block.text.trim()) {
+        pushResult(block.name ?? "tool", block.text.trim());
       }
-      push(name);
     }
   }
-  return { done, paths };
+
+  return { done, paths, results: results.slice(-TOOL_RESULT_N) };
 }
 
 /** Fill packet fields from the live transcript. No extra model call. */
-export function deriveHandoffFields(messages: readonly HandoffSourceMessage[]): Pick<
-  HandoffPacketInput,
-  "inProgress" | "alreadyDone" | "doNotRedo"
-> {
+export function deriveHandoffFields(
+  messages: readonly HandoffSourceMessage[],
+): Pick<HandoffPacketInput, "inProgress" | "alreadyDone" | "doNotRedo"> {
   let inProgress = "";
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -143,11 +167,13 @@ export function deriveHandoffFields(messages: readonly HandoffSourceMessage[]): 
     break;
   }
 
-  const { done, paths } = collectToolWork(messages);
+  const { done, paths, results } = collectTranscriptWork(messages);
   const uniquePaths = [...new Set(paths)];
+  const alreadyLines = [...done, ...results];
   return {
     inProgress: inProgress || UNSPECIFIED,
-    alreadyDone: done.length > 0 ? done.map((line) => `- ${line}`).join("\n") : UNSPECIFIED,
+    alreadyDone:
+      alreadyLines.length > 0 ? alreadyLines.map((line) => `- ${line}`).join("\n") : UNSPECIFIED,
     doNotRedo:
       uniquePaths.length > 0 ? `do not rewrite: ${uniquePaths.join(", ")}` : SEE_DONE,
   };

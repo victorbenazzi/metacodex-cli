@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   loadFallbackSettings,
+  loadLastUsedModels,
+  parseLastUsedModels,
   readSettings,
+  recordLastUsedModel,
   saveFallbackSettings,
 } from "./settings.js";
 
@@ -50,5 +53,34 @@ describe("fallback settings", () => {
     await writeFile(path, "{not json");
     await saveFallbackSettings(home, { chain: ["deepseek"], maxHops: 2 });
     expect(await readFile(path, "utf8")).toBe("{not json");
+  });
+});
+
+describe("lastUsedModels", () => {
+  it("keeps curated providers only and records last-used without touching defaultModel", async () => {
+    expect(
+      parseLastUsedModels({
+        lastUsedModels: {
+          anthropic: "opus",
+          openrouter: "hidden",
+          deepseek: "  deepseek-chat  ",
+          "": "x",
+        },
+      }),
+    ).toEqual({ anthropic: "opus", deepseek: "deepseek-chat" });
+    expect(parseLastUsedModels(undefined)).toEqual({});
+
+    const home = await mkdtemp(join(tmpdir(), "mcx-last-used-"));
+    await writeFile(join(home, "settings.json"), JSON.stringify({ enabledModels: ["anthropic/*"] }));
+    await recordLastUsedModel(home, { provider: "deepseek", id: "deepseek-reasoner" });
+    await recordLastUsedModel(home, { provider: "openrouter", id: "hidden" });
+    expect(await loadLastUsedModels(home)).toEqual({ deepseek: "deepseek-reasoner" });
+    const raw = JSON.parse(await readFile(join(home, "settings.json"), "utf8")) as {
+      enabledModels: string[];
+      lastUsedModels: Record<string, string>;
+    };
+    expect(raw.enabledModels).toEqual(["anthropic/*"]);
+    expect(raw.lastUsedModels).toEqual({ deepseek: "deepseek-reasoner" });
+    expect("defaultModel" in raw).toBe(false);
   });
 });

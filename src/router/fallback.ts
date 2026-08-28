@@ -40,6 +40,8 @@ export interface PlanHopInput {
   currentContextWindow: number;
   models: readonly HopCandidate[];
   skipProviders?: ReadonlySet<string>;
+  /** Last-used model id per curated Pi provider. Ignored for overflow hops. */
+  lastUsedModels?: Readonly<Record<string, string>>;
 }
 
 export type HopPlan =
@@ -57,6 +59,14 @@ const OVERFLOW_RE =
   /prompt is too long|request_too_large|context[_ ]?(length|window)|too many tokens|maximum context|exceeded model token limit|reduce the length of the messages|maximum prompt length|input token count|token limit exceeded/i;
 
 export const DEFAULT_MAX_HOPS = 2;
+export const CHAIN_EXHAUSTED_NOTICE = "fallback chain exhausted";
+
+export function formatChainExhaustedReport(message: string, exhausted: boolean): string {
+  const text = message.trim() || "provider error";
+  if (!exhausted) return text;
+  if (text.includes(CHAIN_EXHAUSTED_NOTICE)) return text;
+  return `${text}\n${CHAIN_EXHAUSTED_NOTICE}`;
+}
 
 function isOverflowText(code: string, message: string): boolean {
   return OVERFLOW_RE.test(message) || code === "context_overflow";
@@ -163,6 +173,7 @@ function pickModelForProvider(
   models: readonly HopCandidate[],
   piId: string,
   minWindow: number | undefined,
+  lastUsedId: string | undefined,
 ): HopCandidate | undefined {
   const pool = models.filter(
     (model) => model.provider === piId && (minWindow === undefined || model.contextWindow > minWindow),
@@ -170,6 +181,10 @@ function pickModelForProvider(
   if (pool.length === 0) return undefined;
   if (minWindow !== undefined) {
     return pool.reduce((best, model) => (model.contextWindow > best.contextWindow ? model : best));
+  }
+  if (lastUsedId) {
+    const last = pool.find((model) => model.modelId === lastUsedId);
+    if (last) return last;
   }
   return pool[0];
 }
@@ -189,7 +204,7 @@ export function planHop(input: PlanHopInput): HopPlan {
     const piId = input.chain[i];
     if (!piId || piId === input.currentProvider) continue;
     if (input.skipProviders?.has(piId)) continue;
-    const to = pickModelForProvider(input.models, piId, minWindow);
+    const to = pickModelForProvider(input.models, piId, minWindow, input.lastUsedModels?.[piId]);
     if (!to) continue;
     return {
       hop: true,

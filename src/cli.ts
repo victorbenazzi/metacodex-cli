@@ -48,9 +48,11 @@ async function main(): Promise<void> {
     "@earendil-works/pi-coding-agent"
   );
   installEngineShims(DefaultResourceLoader, ModelRuntime);
-  const { createMcxExtension } = await import("./extensions/mcx.js");
+  const { createParentExtensions } = await import("./extensions/factories.js");
+  const { loadMcpAdapterFactory } = await import("./extensions/mcp.js");
+  const mcpFactory = await loadMcpAdapterFactory();
   await piMain(argv, {
-    extensionFactories: [createMcxExtension(agentDir)],
+    extensionFactories: createParentExtensions(agentDir, mcpFactory),
   });
 }
 

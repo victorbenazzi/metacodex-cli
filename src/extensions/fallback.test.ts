@@ -10,7 +10,14 @@ function model(provider: string, id: string, contextWindow: number) {
   return { provider, id, contextWindow };
 }
 
-function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
+function createHarness(
+  chain: string[],
+  options?: {
+    withHandoff?: boolean;
+    lastUsed?: Record<string, string>;
+    extraModels?: { provider: string; id: string; contextWindow: number }[];
+  },
+) {
   const handlers = new Map<string, Handler[]>();
   const setModels: { provider: string; id: string }[] = [];
   const notices: string[] = [];
@@ -21,7 +28,7 @@ function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
   const anthropic = model("anthropic", "opus", 200_000);
   const deepseek = model("deepseek", "deepseek-chat", 64_000);
   const kimi = model("kimi-coding", "kimi-k2", 256_000);
-  const available = [anthropic, deepseek, kimi];
+  const available = [anthropic, deepseek, kimi, ...(options?.extraModels ?? [])];
 
   const ctx = {
     model: anthropic,
@@ -81,6 +88,8 @@ function createHarness(chain: string[], options?: { withHandoff?: boolean }) {
   registerFallback(pi as unknown as ExtensionAPI, {
     agentDir: "/tmp/mcx-fallback-test",
     loadSettings: () => ({ chain, maxHops: 2 }),
+    loadLastUsed: () => options?.lastUsed ?? {},
+    recordLastUsed: () => {},
     onAttention: (kind) => {
       attention.push(kind);
     },
@@ -199,5 +208,19 @@ describe("registerFallback", () => {
     expect(harness.setModels).toHaveLength(1);
     expect(harness.packets.filter((packet) => packet.customType === HANDOFF_CUSTOM_TYPE)).toEqual([]);
     expect(harness.notices).toEqual(["retrying on deepseek (rate_limit anthropic)"]);
+  });
+
+  it("hops to last-used of the destination provider, not pool[0]", async () => {
+    const reasoner = model("deepseek", "deepseek-reasoner", 64_000);
+    const harness = createHarness(["anthropic", "deepseek"], {
+      lastUsed: { deepseek: "deepseek-reasoner" },
+      extraModels: [reasoner],
+    });
+    await harness.emit("after_provider_response", { status: 429 });
+    await harness.emit("agent_end", { messages: [assistantError("rate limited")] });
+
+    expect(harness.setModels).toEqual([
+      { provider: "deepseek", id: "deepseek-reasoner", contextWindow: 64_000 },
+    ]);
   });
 });

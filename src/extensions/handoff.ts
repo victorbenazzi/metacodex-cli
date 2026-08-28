@@ -88,15 +88,18 @@ function injectPacket(pi: ExtensionAPI, packet: string, triggerTurn: boolean): v
 }
 
 function compactIfNeeded(
-  ctx: Pick<ExtensionContext, "compact">,
+  ctx: Pick<ExtensionContext, "compact" | "ui">,
   fromWindow: number,
   toWindow: number,
-): Promise<void> {
-  if (!shouldCompactForHandoff(fromWindow, toWindow)) return Promise.resolve();
+): Promise<boolean> {
+  if (!shouldCompactForHandoff(fromWindow, toWindow)) return Promise.resolve(true);
   return new Promise((resolve) => {
     ctx.compact({
-      onComplete: () => resolve(),
-      onError: () => resolve(),
+      onComplete: () => resolve(true),
+      onError: () => {
+        ctx.ui.notify("Handoff compact failed. Staying on the current model.", "error");
+        resolve(false);
+      },
     });
   });
 }
@@ -199,7 +202,7 @@ async function runHandoffCommand(
   if (instruction === undefined) return;
 
   const packet = buildPacket(from, dest, messages, instruction);
-  await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow);
+  if (!(await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow))) return;
   if (!(await switchTo(ctx, pi, dest))) return;
   injectPacket(pi, packet, true);
   ctx.ui.notify(`Handed off to ${dest.provider}/${dest.id}`, "info");
@@ -226,7 +229,7 @@ async function runModelCommand(
     isCuratedPiProvider(dest.provider) &&
     hasConversationTurns(messages);
   if (cross) {
-    await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow);
+    if (!(await compactIfNeeded(ctx, from.contextWindow, dest.contextWindow))) return;
   }
   if (!(await switchTo(ctx, pi, dest))) return;
   if (!cross) return;

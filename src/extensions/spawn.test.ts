@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { SPAWN_TOOL_NAME } from "../router/subagent.js";
 import { oscAttention } from "../osc.js";
-import { registerSpawn, SPAWN_REPORT_CUSTOM_TYPE, type ChildRunRequest } from "./spawn.js";
+import {
+  createChildFallbackExtension,
+  registerSpawn,
+  SPAWN_REPORT_CUSTOM_TYPE,
+  type ChildRunRequest,
+} from "./spawn.js";
 
 type ToolExecute = (
   toolCallId: string,
@@ -219,5 +227,94 @@ describe("registerSpawn", () => {
     const result = await harness.run({ description: "scan grants", prompt: "find it" });
     expect(result.content[0]?.text).toContain("grep exploded");
     expect(harness.osc).toEqual([oscAttention("subagent failed", "scan grants")]);
+  });
+});
+
+describe("child fallback", () => {
+  it("hops on 429 using the parent chain, without registering spawn", async () => {
+    const home = await mkdtemp(join(tmpdir(), "mcx-child-hop-"));
+    await writeFile(
+      join(home, "settings.json"),
+      JSON.stringify({ fallback: { chain: ["anthropic", "deepseek"], maxHops: 2 } }),
+    );
+    const tools: string[] = [];
+    const commands: string[] = [];
+    const setModels: { provider: string; id: string }[] = [];
+    const handlers = new Map<string, Array<(event: Record<string, unknown>, ctx: unknown) => unknown>>();
+    let exhausted = false;
+
+    const anthropic = { provider: "anthropic", id: "opus", contextWindow: 200_000 };
+    const deepseek = { provider: "deepseek", id: "deepseek-chat", contextWindow: 64_000 };
+    const available = [anthropic, deepseek];
+    const ctx = {
+      model: anthropic,
+      modelRegistry: {
+        getAvailable: () => available,
+        find: (provider: string, id: string) =>
+          available.find((item) => item.provider === provider && item.id === id),
+      },
+      ui: {
+        notify: () => {},
+        setStatus: () => {},
+        setWorkingMessage: () => {},
+      },
+    };
+
+    async function emit(type: string, event: Record<string, unknown> = {}) {
+      for (const handler of handlers.get(type) ?? []) {
+        await handler({ type, ...event }, ctx);
+      }
+    }
+
+    const pi = {
+      on(event: string, handler: (event: Record<string, unknown>, ctx: unknown) => unknown) {
+        const list = handlers.get(event) ?? [];
+        list.push(handler);
+        handlers.set(event, list);
+      },
+      registerTool(tool: { name: string }) {
+        tools.push(tool.name);
+      },
+      registerCommand(name: string) {
+        commands.push(name);
+      },
+      async setModel(next: { provider: string; id: string; contextWindow: number }) {
+        setModels.push(next);
+        ctx.model = next;
+        return true;
+      },
+    };
+
+    const ext = createChildFallbackExtension(home, () => {
+      exhausted = true;
+    });
+    if (typeof ext === "function") {
+      ext(pi as unknown as ExtensionAPI);
+    } else {
+      ext.factory(pi as unknown as ExtensionAPI);
+    }
+
+    expect(tools).toEqual([]);
+    expect(commands).not.toContain("auth");
+    expect(commands).not.toContain("handoff");
+
+    await emit("after_provider_response", { status: 429 });
+    const error = {
+      role: "assistant",
+      stopReason: "error",
+      errorMessage: "rate limited",
+      provider: "anthropic",
+    };
+    await emit("agent_end", { messages: [error] });
+
+    expect(setModels).toEqual([{ provider: "deepseek", id: "deepseek-chat", contextWindow: 64_000 }]);
+    expect(exhausted).toBe(false);
+
+    ctx.model = deepseek;
+    await emit("after_provider_response", { status: 429 });
+    await emit("agent_end", {
+      messages: [{ ...error, provider: "deepseek" }],
+    });
+    expect(exhausted).toBe(true);
   });
 });

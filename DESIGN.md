@@ -33,7 +33,7 @@ Não é um fork do Pi. Não é um fork do Grok Build. Não é o Agent view que m
 
 **Fallback.** Mesmo transcript. Troca o endpoint. Strip de blocos provider-specific na hora do reenvio (`cache_control`, thinking/reasoning que o destino não fala). Sem resumo. O usuário não escolheu outro cérebro.
 
-**Handoff.** Transcript + pacote gerado por nós: isto é um handoff, de quem veio, o que estava em curso, o que já valeu, o que não refazer. Tool results entram. Compaction só se a janela do destino for menor. Tools da sessão continuam as mesmas. Instrução do usuário é adendo, nunca substitui o pacote.
+**Handoff.** Transcript + pacote gerado por nós: isto é um handoff, de quem veio, o que estava em curso, o que já valeu, o que não refazer. Tool results entram (últimos N, clip), sobretudo se o destino tiver janela menor. Compaction só se a janela do destino for menor; se o compact falhar, avisa e não troca. Tools da sessão continuam as mesmas. Instrução do usuário é adendo, nunca substitui o pacote.
 
 **Subagent.** Contexto isolado. Brief (objetivo, constraints, paths). **Não** herda o transcript do pai. Default de tools: `read`, `bash`, `grep`, `find`, `ls`. `write` / `edit` só se o spawn pedir. Resultado: um report. Skills: zero até o spawn passar allowlist.
 
@@ -111,9 +111,30 @@ Formato: Agent Skills (`SKILL.md`). Serve nos instaladores do Claude, Codex, Pi 
 
 **Filho:** só `skills[]` do spawn.
 
-**Bundle v1:** uma skill `mcx` ensinando fallback / handoff / spawn ao modelo. Sem marketplace. `mcx skills add <path|git>` é depois.
+**Bundle v1:** uma skill `mcx` ensinando fallback / handoff / spawn / plan / MCP ao modelo. Sem marketplace. `mcx skills add <path|git>` é depois.
 
-Não escrevemos em dirs do Claude/Codex. MCP, hooks e `settings.json` deles: fora.
+Não escrevemos em dirs do Claude/Codex. Hooks e `settings.json` deles: fora. MCP do mcx pode ler `.mcp.json` compartilhado; write só em `~/.mcx/mcp.json` ou `.pi/mcp.json` do projeto se o adapter já faz isso.
+
+## Plan mode (`/plan`)
+
+Permission-mode fino, estilo Claude Code. Não é o pacote `pi-plan-mode`.
+
+- `/plan`, `/plan on`, `/plan off`. Sem args: toggle. Shift+Tab faz o mesmo (thinking cycle fica no `/effort`).
+- Em plan: `read`, `grep`, `find`, `ls` passam; `write`, `edit`, `spawn` recusam; bash só se for claramente read-only.
+- Outras tools (incluindo o proxy MCP) recusam.
+- Status na TUI (`plan`). Prompt extra enquanto estiver ligado.
+- Sem persistência de sessão. `/new` / resume / fork voltam a off.
+- Plan no pai bloqueia `spawn`.
+
+## MCP (`/mcp`)
+
+Pi core não tem MCP. Usamos `pi-mcp-adapter` pinado no npm, carregado por factory. Não `pi install` (isso grava `~/.pi`). Não copiar o pacote para `~/.mcx/extensions`.
+
+- Um proxy tool. Servers lazy. Sem dump de dezenas de tools no prompt.
+- `PI_CODING_AGENT_DIR=~/.mcx`, então o override global é `~/.mcx/mcp.json`.
+- Lê também `.mcp.json` do projeto e configs compartilhadas que o adapter já lê.
+- Writes: `~/.mcx/mcp.json` ou `.pi/mcp.json` do projeto se o adapter já faz isso. Não escreve `~/.pi`, `~/.claude`, `~/.codex`.
+- Filho do spawn: MCP off.
 
 ## Integração com o app (v1)
 
@@ -138,30 +159,31 @@ RPC, ACP, SDK no webview: não no v1. O Agent view não volta.
 | Pin | `@earendil-works/pi-coding-agent@0.84.x` (lockfile pina o patch). |
 | Home Pi | `PI_CODING_AGENT_DIR` / `agentDir` = `~/.mcx` (ou `$MCX_HOME`). |
 | Projeto | Skills em `.agents/`. Não rebrandar `.pi` no v1. |
-| Modelo default | Last-used em settings. Senão, primeiro autenticado na ordem da tabela `/auth`. |
+| Modelo default | Last-used em settings (global no boot; por provider no hop). Senão, primeiro autenticado na ordem da tabela `/auth`. Overflow hop: maior janela. |
 | Idioma TUI | Inglês no v1. pt-BR depois. |
 | Tema | Tema `metacodex` no pi-tui quando for barato. Não bloqueia o roteador. |
 | Print | `mcx -p` (Pi print mode). |
 | Update | `mcx update` instala a última tag/release (`vX.Y.Z`). Não é `pi update`. Não toca `~/.mcx`. Main continua o trunk; canal de quem já tem o binário é a tag. |
 | RPC | Existe no motor. Não é produto no v1. |
 | Windows | Git Bash ou WSL. Sem instalador Win32 no v1. |
-| Testes | Vitest no roteador: classify, strip, pacote de handoff, brief, cap de filhos, catálogo. |
+| Testes | Vitest no roteador: classify, strip, pacote de handoff, brief, cap de filhos, catálogo, gate de plan. Wiring da factory MCP. |
 | Gateway | Não. |
-| Plan mode | Não. |
-| MCP | Não. |
+| Plan mode | Sim. `/plan` (ou Shift+Tab) liga um permission-mode fino. `read` / `grep` / `find` / `ls` ok; `write` / `edit` / `spawn` recusados; bash só se for claramente read-only. Status na TUI. Sair: `/plan` de novo ou `/plan off`. Sem persistência de sessão. Sem plannotator. |
+| MCP | Sim. `pi-mcp-adapter` pinado no npm (não `pi install`). Um proxy tool. Config efetiva em `~/.mcx/mcp.json` via `PI_CODING_AGENT_DIR`. Filho: off. |
 
 ## Disco
 
 ```
 ~/.mcx/                 # ou $MCX_HOME
   auth.json             # Pi ModelRuntime
-  settings.json         # defaultModel, fallback.chain, fallback.maxHops
+  settings.json         # defaultModel, lastUsedModels, fallback.chain, fallback.maxHops
   models.json           # só se precisarmos de override
+  mcp.json              # override global do adapter MCP (não ~/.pi)
   sessions/
     ...                 # sessão pai (jsonl árvore Pi)
     subagents/          # filhos
   skills/               # bundle + user
-  extensions/           # as nossas, carregadas sempre
+  extensions/           # as nossas, se existirem. Pacote MCP não vai aqui.
 ```
 
 Nada em `~/.pi`. Nada em `~/.metacodex`.
@@ -177,11 +199,13 @@ mcx (binário)
     fallback   classify + hops + strip
     handoff    pacote + /handoff
     subagent   spawn + lifecycle
+    plan       permission-mode /plan
+  mcp          factory do pi-mcp-adapter (pai só)
   skills       discovery B
   osc          0/2, 9, 99
 ```
 
-O loop, tools built-in, compaction, sessions tree, `/model` base: Pi. Fallback, handoff, spawn, `/auth` curado, skills extras, OSC: **nosso**.
+O loop, tools built-in, compaction, sessions tree, `/model` base: Pi. Fallback, handoff, spawn, `/auth` curado, `/plan`, skills extras, OSC: **nosso**. MCP: adapter pinado, sem fork.
 
 ## Ordem de construção
 

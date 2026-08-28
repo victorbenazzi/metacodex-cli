@@ -3,10 +3,12 @@ import {
   canHop,
   classifyProviderFailure,
   disguiseOverflowForRetry,
+  formatChainExhaustedReport,
   formatHopNotice,
   isAuthFailure,
   parseFallbackSettings,
   planHop,
+  CHAIN_EXHAUSTED_NOTICE,
 } from "./fallback.js";
 
 describe("classifyProviderFailure", () => {
@@ -194,6 +196,67 @@ describe("planHop", () => {
       });
     }
   });
+
+  it("uses last-used of the destination provider, not pool[0], except overflow", () => {
+    const pool = [
+      { provider: "anthropic", modelId: "opus", contextWindow: 200_000 },
+      { provider: "deepseek", modelId: "deepseek-chat", contextWindow: 64_000 },
+      { provider: "deepseek", modelId: "deepseek-reasoner", contextWindow: 64_000 },
+      { provider: "kimi-coding", modelId: "kimi-k2", contextWindow: 128_000 },
+      { provider: "kimi-coding", modelId: "kimi-k2-wide", contextWindow: 256_000 },
+    ];
+    const lastUsed = {
+      deepseek: "deepseek-reasoner",
+      "kimi-coding": "kimi-k2",
+    };
+
+    const hopped = planHop({
+      failure: { httpStatus: 429 },
+      chain: ["anthropic", "deepseek"],
+      hopIndex: 0,
+      currentProvider: "anthropic",
+      currentContextWindow: 200_000,
+      models: pool,
+      lastUsedModels: lastUsed,
+    });
+    expect(hopped.hop).toBe(true);
+    if (hopped.hop) {
+      expect(hopped.to.modelId).toBe("deepseek-reasoner");
+      expect(hopped.to.modelId).not.toBe("deepseek-chat");
+    }
+
+    const unknown = planHop({
+      failure: { httpStatus: 429 },
+      chain: ["anthropic", "deepseek"],
+      hopIndex: 0,
+      currentProvider: "anthropic",
+      currentContextWindow: 200_000,
+      models: pool,
+      lastUsedModels: { deepseek: "not-in-catalog", openrouter: "hidden" },
+    });
+    expect(unknown.hop).toBe(true);
+    if (unknown.hop) {
+      expect(unknown.to.modelId).toBe("deepseek-chat");
+    }
+
+    const overflow = planHop({
+      failure: { message: "maximum context length exceeded", compactedAlready: true },
+      chain: ["anthropic", "deepseek", "kimi-coding"],
+      hopIndex: 0,
+      currentProvider: "anthropic",
+      currentContextWindow: 200_000,
+      models: pool,
+      lastUsedModels: lastUsed,
+    });
+    expect(overflow.hop).toBe(true);
+    if (overflow.hop) {
+      expect(overflow.to).toEqual({
+        provider: "kimi-coding",
+        modelId: "kimi-k2-wide",
+        contextWindow: 256_000,
+      });
+    }
+  });
 });
 
 describe("disguiseOverflowForRetry", () => {
@@ -201,5 +264,15 @@ describe("disguiseOverflowForRetry", () => {
     const disguised = disguiseOverflowForRetry("maximum context length exceeded");
     expect(disguised.startsWith("rate limit:")).toBe(true);
     expect(disguised).toContain("maximum context length exceeded");
+  });
+});
+
+describe("formatChainExhaustedReport", () => {
+  it("appends the chain notice once, and leaves a non-hop failure alone", () => {
+    expect(formatChainExhaustedReport("rate limited", true)).toBe(
+      `rate limited\n${CHAIN_EXHAUSTED_NOTICE}`,
+    );
+    expect(formatChainExhaustedReport(CHAIN_EXHAUSTED_NOTICE, true)).toBe(CHAIN_EXHAUSTED_NOTICE);
+    expect(formatChainExhaustedReport("unauthorized", false)).toBe("unauthorized");
   });
 });

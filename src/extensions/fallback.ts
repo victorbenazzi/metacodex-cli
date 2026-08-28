@@ -5,11 +5,12 @@ import {
   disguiseOverflowForRetry,
   isAuthFailure,
   planHop,
+  CHAIN_EXHAUSTED_NOTICE,
   type FallbackSettings,
   type HopCandidate,
   type ProviderFailure,
 } from "../router/fallback.js";
-import { loadFallbackSettings } from "../settings.js";
+import { loadFallbackSettings, loadLastUsedModels, recordLastUsedModel, type LastUsedModels } from "../settings.js";
 import type { AttentionKind } from "./osc.js";
 import { stripForProvider, type RouterMessage } from "../router/strip.js";
 
@@ -28,6 +29,10 @@ interface FallbackState {
 }
 
 export type LoadFallbackSettings = () => Promise<FallbackSettings> | FallbackSettings;
+
+export type LoadLastUsedModels = () => Promise<LastUsedModels> | LastUsedModels;
+
+export type RecordLastUsedModel = (model: { provider: string; id: string }) => void | Promise<void>;
 
 export type FallbackAttention = (kind: AttentionKind) => void;
 
@@ -98,8 +103,8 @@ function announceAttention(
   }
   const decision = classifyProviderFailure(failure);
   if (decision.hop && settings.chain.length > 0) {
-    ctx.ui.notify("fallback chain exhausted", "error");
-    ctx.ui.setStatus("mcx-fallback", "fallback chain exhausted");
+    ctx.ui.notify(CHAIN_EXHAUSTED_NOTICE, "error");
+    ctx.ui.setStatus("mcx-fallback", CHAIN_EXHAUSTED_NOTICE);
     onAttention?.("exhausted");
   }
 }
@@ -109,10 +114,16 @@ export function registerFallback(
   options: {
     agentDir: string;
     loadSettings?: LoadFallbackSettings;
+    loadLastUsed?: LoadLastUsedModels;
+    recordLastUsed?: RecordLastUsedModel;
     onAttention?: FallbackAttention;
   },
 ): void {
   const loadSettings = options.loadSettings ?? (() => loadFallbackSettings(options.agentDir));
+  const loadLastUsed = options.loadLastUsed ?? (() => loadLastUsedModels(options.agentDir));
+  const recordLastUsed =
+    options.recordLastUsed ??
+    ((model: { provider: string; id: string }) => recordLastUsedModel(options.agentDir, model));
   const state: FallbackState = {
     hopIndex: 0,
     compactedAlready: false,
@@ -130,6 +141,13 @@ export function registerFallback(
   pi.on("session_start", (_event, ctx) => {
     resetPrompt();
     ctx.ui.setStatus("mcx-fallback", undefined);
+  });
+
+  pi.on("model_select", (event) => {
+    if (event.source !== "set") return;
+    const model = event.model;
+    if (!model || !isCuratedPiProvider(model.provider) || !model.id) return;
+    void recordLastUsed({ provider: model.provider, id: model.id });
   });
 
   pi.on("before_agent_start", () => {
@@ -197,6 +215,7 @@ export function registerFallback(
     const currentContextWindow = ctx.model?.contextWindow ?? 0;
     const models = hopModels(ctx);
     const failure = failureFromTurn(assistant, state.lastHttpStatus, state.compactedAlready);
+    const lastUsedModels = await loadLastUsed();
 
     for (;;) {
       const plan = planHop({
@@ -208,6 +227,7 @@ export function registerFallback(
         currentContextWindow,
         models,
         skipProviders: skip,
+        lastUsedModels,
       });
       if (!plan.hop) {
         announceAttention(ctx, failure, settings, options.onAttention);

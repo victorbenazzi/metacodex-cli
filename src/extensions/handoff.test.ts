@@ -9,7 +9,11 @@ function model(provider: string, id: string, contextWindow: number) {
   return { provider, id, name: id, contextWindow };
 }
 
-function createHarness(options?: { instruction?: string | undefined; emptyThread?: boolean }) {
+function createHarness(options?: {
+  instruction?: string | undefined;
+  emptyThread?: boolean;
+  compactError?: boolean;
+}) {
   const handlers = new Map<string, Handler[]>();
   const commands = new Map<
     string,
@@ -64,8 +68,12 @@ function createHarness(options?: { instruction?: string | undefined; emptyThread
               },
             ],
     },
-    compact: (opts?: { onComplete?: (result: never) => void }) => {
+    compact: (opts?: { onComplete?: (result: never) => void; onError?: (error: Error) => void }) => {
       compactCalls += 1;
+      if (options?.compactError) {
+        opts?.onError?.(new Error("compact failed"));
+        return;
+      }
       opts?.onComplete?.(undefined as never);
     },
     ui: {
@@ -218,5 +226,16 @@ describe("registerHandoff", () => {
     ]);
     expect(harness.packets).toHaveLength(0);
     expect(harness.notices).toContain("Switched to deepseek/deepseek-chat");
+  });
+
+  it("warns and stays on the current model when compact fails", async () => {
+    const harness = createHarness({ instruction: "finish the tests only", compactError: true });
+    await harness.emit("session_start");
+    await harness.commands.get("handoff")?.handler("deepseek/deepseek-chat", harness.ctx);
+
+    expect(harness.compactCalls).toBe(1);
+    expect(harness.setModels).toEqual([]);
+    expect(harness.packets).toHaveLength(0);
+    expect(harness.notices).toContain("Handoff compact failed. Staying on the current model.");
   });
 });

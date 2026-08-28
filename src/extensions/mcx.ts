@@ -13,6 +13,7 @@ import { registerFallback } from "./fallback.js";
 import { registerHandoff } from "./handoff.js";
 import { registerHeader } from "./header.js";
 import { createOscBridge, registerOsc } from "./osc.js";
+import { registerPlan } from "./plan.js";
 import { registerSkillDiscovery } from "./skills.js";
 import { registerSpawn } from "./spawn.js";
 import { registerTruncationShortener } from "./truncation.js";
@@ -49,6 +50,7 @@ export function createMcxExtension(agentDir: string): InlineExtension {
       });
       registerHandoff(pi);
       registerEffort(pi);
+      registerPlan(pi);
       registerSpawn(pi, { agentDir, writeOsc: osc.write });
       registerSkillDiscovery(pi, { discover: (cwd) => extraSkillPaths(cwd, homedir(), agentDir) });
       registerOsc(pi, osc);
