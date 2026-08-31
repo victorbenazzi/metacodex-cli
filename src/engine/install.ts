@@ -21,6 +21,11 @@
  *   Why: Pi restores its default title after session_start.
  *   Breaks if title restore timing changes: OSC / tab title flickers back to pi.
  *
+ * applyGhosttyThemeContrastWorkaround (src/engine/theme.ts, installed from src/cli.ts)
+ *   Cross-checks Ghostty's color-scheme report against its actual OSC 11 background.
+ *   Why: Ghostty 1.3.1 can report the Linux desktop scheme instead of the terminal palette.
+ *   Breaks if Pi changes --use-theme semantics: a conflicting report can select low-contrast colors.
+ *
  * disguiseOverflowForRetry (src/router/fallback.ts)
  *   Prefixes overflow errors with `rate limit:` after we hop.
  *   Why: Pi will not auto-retry overflow after one compact. The disguise re-enters the retry loop.

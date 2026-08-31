@@ -1,6 +1,6 @@
 {
   "name": "metacodex-cli",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Multi-provider coding agent CLI. Session router on the Pi SDK.",
   "repository": {

@@ -4,7 +4,7 @@
  * push the tag. The tag workflow publishes a GitHub Release. CI does not bump.
  * The tag must match this string. Not npm.
  */
-export const MCX_VERSION = "0.0.1";
+export const MCX_VERSION = "0.0.2";
 export const MCX_BIN = "mcx";
 export const MCX_PRODUCT = "metacodex-cli";
 export const PI_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";

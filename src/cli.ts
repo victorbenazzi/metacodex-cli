@@ -9,7 +9,9 @@ import {
 } from "./bootstrap.js";
 import { installEngineShims } from "./engine/install.js";
 import { installResumeHintRewrite } from "./engine/resume.js";
+import { applyGhosttyThemeContrastWorkaround } from "./engine/theme.js";
 import { isHelpArg, isVersionArg, mcxHelp } from "./help.js";
+import { readSettings } from "./settings.js";
 import { isUpdateArg, mcxUpdateFailed, runMcxUpdate } from "./update.js";
 import { MCX_VERSION, PI_AGENT_DIR_ENV, pinEngineUpdates } from "./version.js";
 
@@ -37,8 +39,10 @@ async function main(): Promise<void> {
   process.env[PI_AGENT_DIR_ENV] = agentDir;
   pinEngineUpdates();
   installResumeHintRewrite();
+  await seedMcxSettings(agentDir);
+  const settings = await readSettings(agentDir);
+  const themedArgv = await applyGhosttyThemeContrastWorkaround(argv, settings?.theme);
   await Promise.all([
-    seedMcxSettings(agentDir),
     installBundledSkill(agentDir),
     installBundledThemes(agentDir),
     installBundledKeybindings(agentDir),
@@ -51,7 +55,7 @@ async function main(): Promise<void> {
   const { createParentExtensions } = await import("./extensions/factories.js");
   const { loadMcpAdapterFactory } = await import("./extensions/mcp.js");
   const mcpFactory = await loadMcpAdapterFactory();
-  await piMain(argv, {
+  await piMain(themedArgv, {
     extensionFactories: createParentExtensions(agentDir, mcpFactory),
   });
 }

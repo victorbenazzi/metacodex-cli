@@ -10,7 +10,7 @@ Coding agent CLI. One session, several wallets. Anthropic, OpenAI, Codex, OpenCo
 
 It is not a fork of [Pi](https://github.com/earendil-works/pi-mono). The engine is the Pi SDK. Home is `~/.mcx`. It does not read or write `~/.metacodex` or `~/.pi`.
 
-Status: **0.0.1**. Install from this repo (not on npm yet). The engine is pinned to Pi `0.84.x`. Do not run `pi update`. When the engine moves, a new `mcx` version ships it.
+Status: **0.0.2**. Install from this repo (not on npm yet). The engine is pinned to Pi `0.84.x`. Do not run `pi update`. When the engine moves, a new `mcx` version ships it.
 
 The [metacodex](https://github.com/victorbenazzi) desktop app stays the shell. Later it launches `mcx` as a PTY tab. This repo is the CLI.
 
@@ -41,7 +41,7 @@ curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/sc
 That fetches current `install.sh` from `main`, then downloads the **latest GitHub release** (tag `vX.Y.Z`), runs `pnpm install && pnpm build`, and links `mcx` to `~/.local/bin/mcx`. Not the tip of `main`.
 
 ```bash
-mcx --version    # mcx 0.0.1
+mcx --version    # mcx 0.0.2
 mcx --help
 ```
 
@@ -61,7 +61,7 @@ To install trunk or pin a ref, set `MCX_REF` (branch, tag, or commit):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=main bash
-curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=v0.0.1 bash
+curl -fsSL https://raw.githubusercontent.com/victorbenazzi/metacodex-cli/main/scripts/install.sh | MCX_REF=v0.0.2 bash
 ```
 
 ### Install from a clone
